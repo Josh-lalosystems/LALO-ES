@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Dict, List, Optional
 from pydantic import BaseModel
 from datetime import datetime
+from uuid import uuid4
 
 from ..services.key_management import key_manager, APIKeyRequest
 from ..services.ai_service import ai_service
@@ -41,19 +42,35 @@ async def send_ai_request(
 ) -> AIResponse:
     """Send a request to AI models"""
     try:
-        response = await ai_service.send_request(
+        # Ensure user models are initialized based on stored keys
+        if current_user not in ai_service.models:
+            try:
+                api_keys = key_manager.get_keys(current_user)
+                ai_service.initialize_user_models(current_user, api_keys)
+            except Exception:
+                pass
+
+        available = ai_service.get_available_models(current_user)
+        model = request.model or (available[0] if available else None)
+        if not available or not model or model not in available:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No available models for this user. Add API keys first or choose a valid model."
+            )
+
+        generated = await ai_service.generate(
+            request.prompt,
+            model_name=model,
             user_id=current_user,
-            prompt=request.prompt,
-            model=request.model,
             max_tokens=request.max_tokens,
-            temperature=request.temperature
+            temperature=request.temperature,
         )
         return AIResponse(
-            id=response.get("id", ""),
-            response=response.get("response", ""),
-            model=response.get("model", request.model),
-            usage=response.get("usage", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}),
-            created_at=datetime.now().isoformat()
+            id=str(uuid4()),
+            response=generated,
+            model=model,
+            usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            created_at=datetime.now().isoformat(),
         )
     except Exception as e:
         raise HTTPException(
@@ -75,6 +92,13 @@ async def get_available_models(
 ) -> List[str]:
     """Get list of available AI models"""
     try:
+        # Ensure models are initialized for this user from stored keys
+        if current_user not in ai_service.models:
+            try:
+                api_keys = key_manager.get_keys(current_user)
+                ai_service.initialize_user_models(current_user, api_keys)
+            except Exception:
+                pass
         models = ai_service.get_available_models(current_user)
         return models
     except Exception as e:
@@ -123,6 +147,11 @@ async def add_api_key(
 
         key_request = APIKeyRequest(**key_data)
         key_manager.set_keys(current_user, key_request)
+        # Initialize user models now that keys are available
+        try:
+            ai_service.initialize_user_models(current_user, key_manager.get_keys(current_user))
+        except Exception:
+            pass
         return {"status": "success", "message": f"{provider} key added successfully"}
     except Exception as e:
         raise HTTPException(
@@ -229,7 +258,7 @@ async def check_api_keys(
     current_user: str = Depends(get_current_user)
 ) -> Dict[str, bool]:
     """Check status of stored API keys"""
-    return key_manager.validate_keys(current_user)
+    return await key_manager.validate_keys(current_user)
 
 @router.get("/models")
 async def list_models(

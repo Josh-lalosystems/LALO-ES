@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git rev-parse --is-inside-work-tree)",
+      "Bash(python:*)",
+      "Bash(npm ci:*)",
+      "Bash(npm run build:*)",
+      "Bash(pytest:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git push:*)"
+      // "Bash(gh pr create:*)" permission removed for security
+    "deny": [],
+    "ask": []
+  }
+}
