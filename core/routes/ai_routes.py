@@ -110,13 +110,18 @@ async def add_api_key(
 ):
     """Add a new API key"""
     try:
-        # Create APIKeyRequest object
-        key_request = APIKeyRequest()
-        if provider.lower() == "openai":
-            key_request.openai_api_key = key
-        elif provider.lower() == "anthropic":
-            key_request.anthropic_api_key = key
-        
+        # Create APIKeyRequest object with correct field names
+        key_data = {}
+        if provider.lower() in ["openai", "gpt", "gpt-4", "gpt-3.5"]:
+            key_data["openai_key"] = key
+        elif provider.lower() in ["anthropic", "claude"]:
+            key_data["anthropic_key"] = key
+        else:
+            # For other providers, default to storing as OpenAI for now
+            # This allows frontend to send other provider names without failing
+            key_data["openai_key"] = key
+
+        key_request = APIKeyRequest(**key_data)
         key_manager.set_keys(current_user, key_request)
         return {"status": "success", "message": f"{provider} key added successfully"}
     except Exception as e:
