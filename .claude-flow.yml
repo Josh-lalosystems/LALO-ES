@@ -1,0 +1,144 @@
+# Claude Flow Guardrails for the LALO-ES repository
+#
+# Purpose: Provide clear constraints and conventions for any autonomous or semi-autonomous
+# coding agent (e.g., Claude Flow, Claude Code) operating on this repo from a local Windows
+# environment. This file is documentation-first and may be used by tools that honor these
+# conventions. Sections are written to be human- and agent-readable.
+
+version: 1
+project:
+  name: LALO-ES
+  description: "Guardrails for multi-agent changes; protect critical assets and require PR workflow."
+
+workflow:
+  default_branch: main
+  working_branch_prefix: cf/
+  require_pull_request: true
+  require_review: true
+  pr_title_prefix: "[Claude Flow]"
+  commit_message_conventions:
+    - style: conventional
+    - examples:
+        - feat(frontend): add API key manager UI state sync
+        - fix(core): handle None start_date in get_usage_stats
+        - chore(ci): tighten Claude Flow guardrails
+
+environment:
+  # Required environment variables the agent must never hardcode into source files.
+  required_env:
+    - ANTHROPIC_API_KEY
+    - OPENAI_API_KEY
+  never_commit_patterns:
+    - "*API_KEY*"
+    - "*TOKEN*"
+    - "*SECRET*"
+  notes:
+    - "Do not write secrets to files. Access keys from process environment only."
+
+protections:
+  # Paths that must never be modified by agents unless explicitly approved in a dedicated PR.
+  read_only:
+    - "LICENSE*"
+    - "MIT License.txt"
+    - "README.md"
+    - "docs/**"
+    - "Screenshot*.*"
+    - "**/*.png"
+    - "**/*.jpg"
+    - "**/*.jpeg"
+    - "**/*.gif"
+    - "**/*.ico"
+    - "**/*.pdf"
+    - "**/*.db"
+    - "**/*.sqlite"
+  # High-risk files that should be changed only with an explicit plan and tests.
+  restricted:
+    - path: "alembic.ini"
+      reason: "Database migration config—changing may break Alembic setup."
+    - path: "migrations/**"
+      reason: "Schema history—changes require migration plan and review."
+    - path: "compose.yml"
+      reason: "Infra orchestration—changes affect local deployments."
+    - path: "requirements.txt"
+      reason: "Python dependency lock—explain why and run tests if changed."
+    - path: "lalo-frontend/package.json"
+      reason: "Frontend deps—explain why and run build if changed."
+    - path: "lalo-frontend/tsconfig.json"
+      reason: "TypeScript config—explain impact and run typecheck/build."
+  # Where agents are generally allowed to edit.
+  allowed_write:
+    - "*.py"
+    - "*.md"
+    - "*.yml"
+    - "*.yaml"
+    - "core/**"
+    - "services/**"
+    - "connectors/**"
+    - "mcp/**"
+    - "creation/**"
+    - "rtinterpreter/**"
+    - "config/**"
+    - "tests/**"
+    - "utils/**"
+    - "lalo-frontend/src/**"
+    - "lalo-frontend/public/**"
+
+commands:
+  # Windows PowerShell-friendly commands that are permitted for build/test/check operations.
+  allowlist:
+    - "git status"
+    - "git rev-parse --abbrev-ref HEAD"
+    - "git add -A"
+    - "git commit -m *"
+    - "git switch -c cf/*"
+    - "git checkout -b cf/*"
+    - "git push --set-upstream origin cf/*"
+    - "python -m pip install -r requirements.txt"
+    - "pip install *"
+    - "pytest*"
+    - "python -m compileall ."
+    - "npm ci"
+    - "npm install"
+    - "npm run build"
+    - "npm run start"
+    - "npm run test*"
+  denylist:
+    - "rm -rf *"
+    - "del /s /q *"
+    - "format*"
+    - "shutdown*"
+    - "powershell Set-ExecutionPolicy*"
+    - "curl http*"
+    - "Invoke-WebRequest http*"
+
+quality_gates:
+  # Fast, conservative checks that should pass before proposing a PR.
+  steps:
+    - name: Python syntax check
+      run: "python -m compileall ."
+    - name: Python tests (if present)
+      run: "pytest -q"
+      continue_on_fail: true  # Don’t block if tests are missing; surface results if they exist.
+    - name: Frontend build
+      run: "npm ci ; npm run build"
+      working_directory: "lalo-frontend"
+      continue_on_fail: false
+
+review_requirements:
+  - "Summarize all files changed and why."
+  - "Confirm no secrets or tokens are added or leaked."
+  - "Include before/after behavior and screenshots for UI changes if possible."
+  - "Link to passing build output or paste command results from quality_gates."
+
+planning:
+  # Encourage a SPARC-style plan before multi-file edits.
+  methodology: SPARC
+  expectations:
+    - "Produce a concise plan with scope, success criteria, and rollback."
+    - "Call out edge cases and data shape contracts for new endpoints/components."
+    - "Prefer small, testable increments over large refactors."
+
+notes:
+  - "This guardrails file is advisory. Tools that understand it should enforce rules; humans should follow it during code review."
+  - "When touching restricted files, open a dedicated PR with extra context and explicit reviewer ping."
+  - "For Windows local, prefer PowerShell-compatible commands and avoid GNU-specific flags."
