@@ -7,36 +7,15 @@ from sqlalchemy.orm import sessionmaker
 import json
 import os
 from cryptography.fernet import Fernet
+from openai import AsyncOpenAI
+from anthropic import AsyncAnthropic
 
 # Initialize encryption
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY") or Fernet.generate_key()
 fernet = Fernet(ENCRYPTION_KEY)
 
-# Database setup
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./apikeys.db")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-class APIKeys(Base):
-    __tablename__ = "api_keys"
-    
-    user_id = Column(String, primary_key=True)
-    encrypted_keys = Column(String)
-    
-    @property
-    def keys(self) -> Dict[str, str]:
-        if not self.encrypted_keys:
-            return {}
-        decrypted = fernet.decrypt(self.encrypted_keys.encode())
-        return json.loads(decrypted)
-    
-    @keys.setter
-    def keys(self, value: Dict[str, str]):
-        encrypted = fernet.encrypt(json.dumps(value).encode())
-        self.encrypted_keys = encrypted.decode()
-
-Base.metadata.create_all(bind=engine)
+# Database setup - use shared database
+from ..database import Base, SessionLocal, engine, APIKeys
 
 class APIKeyRequest(BaseModel):
     openai_key: Optional[SecretStr]
@@ -44,44 +23,45 @@ class APIKeyRequest(BaseModel):
     # Add other API keys as needed
 
 class KeyManager:
-    def __init__(self):
-        self.db = SessionLocal()
-    
-    def __del__(self):
-        self.db.close()
+    def get_session(self):
+        """Get a database session"""
+        return SessionLocal()
     
     def get_keys(self, user_id: str) -> Dict[str, str]:
         """Get API keys for a user"""
-        record = self.db.query(APIKeys).filter(APIKeys.user_id == user_id).first()
-        if not record:
-            return {}
-        return record.keys
+        with self.get_session() as db:
+            record = db.query(APIKeys).filter(APIKeys.user_id == user_id).first()
+            if not record:
+                return {}
+            return record.keys
     
     def set_keys(self, user_id: str, keys: APIKeyRequest):
         """Store or update API keys for a user"""
-        record = self.db.query(APIKeys).filter(APIKeys.user_id == user_id).first()
-        if not record:
-            record = APIKeys(user_id=user_id)
-            self.db.add(record)
-        
-        # Update existing keys dictionary
-        current_keys = record.keys
-        if keys.openai_key:
-            current_keys["openai"] = keys.openai_key.get_secret_value()
-        if keys.anthropic_key:
-            current_keys["anthropic"] = keys.anthropic_key.get_secret_value()
-        
-        record.keys = current_keys
-        self.db.commit()
+        with self.get_session() as db:
+            record = db.query(APIKeys).filter(APIKeys.user_id == user_id).first()
+            if not record:
+                record = APIKeys(user_id=user_id)
+                db.add(record)
+            
+            # Update existing keys dictionary
+            current_keys = record.keys
+            if keys.openai_key:
+                current_keys["openai"] = keys.openai_key.get_secret_value()
+            if keys.anthropic_key:
+                current_keys["anthropic"] = keys.anthropic_key.get_secret_value()
+            
+            record.keys = current_keys
+            db.commit()
     
     def delete_keys(self, user_id: str):
         """Delete all API keys for a user"""
-        record = self.db.query(APIKeys).filter(APIKeys.user_id == user_id).first()
-        if record:
-            self.db.delete(record)
-            self.db.commit()
+        with self.get_session() as db:
+            record = db.query(APIKeys).filter(APIKeys.user_id == user_id).first()
+            if record:
+                db.delete(record)
+                db.commit()
     
-    def validate_keys(self, user_id: str) -> Dict[str, bool]:
+    async def validate_keys(self, user_id: str) -> Dict[str, bool]:
         """Validate that stored API keys are working"""
         keys = self.get_keys(user_id)
         status = {}

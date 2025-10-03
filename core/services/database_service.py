@@ -1,10 +1,10 @@
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import uuid
 
-from database import User, Request, UsageRecord, RequestStatus
+from ..database import User, Request, UsageRecord, RequestStatus, get_db, SessionLocal
 
 class DatabaseService:
     def __init__(self, db: Session):
@@ -53,7 +53,8 @@ class DatabaseService:
         request = self.db.query(Request).filter(Request.id == request_id).first()
         if request:
             if status == RequestStatus.COMPLETED:
-                request.completed_at = datetime.utcnow()
+                from datetime import timezone
+                request.completed_at = datetime.now(timezone.utc)
             request.status = status
             if response is not None:
                 request.response = response
@@ -118,7 +119,7 @@ class DatabaseService:
         user_id: str,
         days: int = 30
     ):
-        start_date = datetime.utcnow() - timedelta(days=days)
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
         return self.db.query(UsageRecord)\
             .filter(
                 UsageRecord.user_id == user_id,
@@ -126,3 +127,11 @@ class DatabaseService:
             )\
             .order_by(UsageRecord.date.asc())\
             .all()
+
+# Create a global database service instance
+def get_database_service() -> DatabaseService:
+    db = SessionLocal()
+    return DatabaseService(db)
+
+# Global instance for use across the application
+database_service = get_database_service()

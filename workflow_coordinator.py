@@ -15,6 +15,7 @@ from typing import Dict, Optional, Tuple
 from enum import Enum
 from dataclasses import dataclass
 import asyncio
+from datetime import datetime
 
 from .confidence_system import ConfidenceSystem, InterpretationResult
 from .enhanced_memory_manager import EnhancedMemoryManager
@@ -100,7 +101,7 @@ class WorkflowCoordinator:
         self.memory_manager.record_feedback(session_id, {
             "stage": stage.value,
             "feedback": feedback,
-            "timestamp": "utc_timestamp_here"
+            "timestamp": datetime.utcnow().isoformat()
         })
         
         context.feedback_history.append({

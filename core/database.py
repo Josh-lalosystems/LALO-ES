@@ -1,12 +1,18 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Enum
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Enum, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 import enum
 import os
+import json
 from dotenv import load_dotenv
+from cryptography.fernet import Fernet
 
 load_dotenv()
+
+# Initialize encryption for API keys
+ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY") or Fernet.generate_key()
+fernet = Fernet(ENCRYPTION_KEY)
 
 # Database configuration
 DATABASE_URL = "sqlite:///./lalo.db"
@@ -71,6 +77,24 @@ class UsageRecord(Base):
 
     # Relationships
     user = relationship("User", back_populates="usage_records")
+
+class APIKeys(Base):
+    __tablename__ = "api_keys"
+    
+    user_id = Column(String, primary_key=True)
+    encrypted_keys = Column(String)
+    
+    @property
+    def keys(self) -> dict:
+        if not self.encrypted_keys:
+            return {}
+        decrypted = fernet.decrypt(self.encrypted_keys.encode())
+        return json.loads(decrypted)
+    
+    @keys.setter
+    def keys(self, value: dict):
+        encrypted = fernet.encrypt(json.dumps(value).encode())
+        self.encrypted_keys = encrypted.decode()
 
 # Create all tables
 Base.metadata.create_all(bind=engine)

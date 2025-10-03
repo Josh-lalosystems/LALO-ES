@@ -3,12 +3,21 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Optional
+import openai
+import anthropic
 
 from .workflow_coordinator import WorkflowCoordinator, WorkflowState
 from .confidence_system import ConfidenceSystem
 from .enhanced_memory_manager import EnhancedMemoryManager
+from .tool_connector_ui import UiToolConnector
 
 app = FastAPI()
+
+# API Keys storage
+api_keys = {
+    "openai": None,
+    "anthropic": None
+}
 
 # Initialize components
 workflow_coordinator = WorkflowCoordinator()
@@ -28,6 +37,15 @@ class UserRequest(BaseModel):
 
 class FeedbackRequest(BaseModel):
     feedback: Dict
+
+class AuthRequest(BaseModel):
+    client_id: str
+    tenant_id: str
+
+class ChatRequest(BaseModel):
+    message: str
+    provider: str
+    model: Optional[str] = None
     stage: WorkflowState
 
 @app.post("/workflow/start")
@@ -100,48 +118,6 @@ def _get_next_steps(context) -> Dict:
             "results": context.execution_results
         }
     return {"action": "complete"}
-def add_document_api(req: AddDocRequest):
-    # Generate embedding using OpenAI
-    if not api_keys["openai"]:
-        raise HTTPException(status_code=400, detail="OpenAI API key not set")
-    client = openai.OpenAI(api_key=api_keys["openai"])
-    emb_response = client.embeddings.create(
-        input=req.text,
-        model="text-embedding-3-small"  # or another embedding model
-    )
-    embedding = emb_response.data[0].embedding
-    collection.add(
-        ids=[req.doc_id],
-        documents=[req.text],
-        embeddings=[embedding]
-    )
-    return {"status": "success"}
-
-class QueryRequest(BaseModel):
-    query: str
-    n_results: int = 3
-
-@app.post("/semantic_search")
-def semantic_search_api(req: QueryRequest):
-    # Generate embedding for query
-    if not api_keys["openai"]:
-        raise HTTPException(status_code=400, detail="OpenAI API key not set")
-    client = openai.OpenAI(api_key=api_keys["openai"])
-    emb_response = client.embeddings.create(
-        input=req.query,
-        model="text-embedding-3-small"
-    )
-    query_embedding = emb_response.data[0].embedding
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=req.n_results
-    )
-    return results
-def get_keys():
-    return {
-        "openai_set": api_keys["openai"] is not None,
-        "anthropic_set": api_keys["anthropic"] is not None
-    }
 
 @app.post("/list_onedrive_files")
 def list_onedrive_files(auth: AuthRequest):

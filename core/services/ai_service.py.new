@@ -25,8 +25,8 @@ class BaseAIModel(ABC):
         pass
 
 class OpenAIModel(BaseAIModel):
-    def __init__(self, model: str = "gpt-4", api_key: str = None):
-        self.client = AsyncOpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
+    def __init__(self, model: str = "gpt-4"):
+        self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.model = model
 
     async def generate(self, prompt: str, **kwargs) -> str:
@@ -49,8 +49,8 @@ class OpenAIModel(BaseAIModel):
                 yield chunk.choices[0].delta.content
 
 class AnthropicModel(BaseAIModel):
-    def __init__(self, model: str = "claude-2", api_key: str = None):
-        self.client = AsyncAnthropic(api_key=api_key or os.getenv("ANTHROPIC_API_KEY"))
+    def __init__(self, model: str = "claude-2"):
+        self.client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         self.model = model
 
     async def generate(self, prompt: str, **kwargs) -> str:
@@ -129,19 +129,13 @@ class AIService:
         self, 
         prompt: str, 
         model_name: str = "gpt-4",
-        user_id: str = None,
         stream: bool = False,
         **kwargs
     ) -> Union[str, AsyncGenerator[str, None]]:
-        if user_id not in self.models or model_name not in self.models[user_id]:
-            raise ValueError(f"Model {model_name} not available for user {user_id}")
+        if model_name not in self.models:
+            raise ValueError(f"Model {model_name} not available")
 
         if stream:
-            return self.models[user_id][model_name].stream(prompt, **kwargs)
+            return self.models[model_name].stream(prompt, **kwargs)
         else:
-            return await self.models[user_id][model_name].generate(prompt, **kwargs)
-
-
-# Create global service instances
-from .database_service import database_service
-ai_service = AIService(database_service)
+            return await self.models[model_name].generate(prompt, **kwargs)

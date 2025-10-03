@@ -7,7 +7,7 @@ sqlalchemy==1.4.23
 aiofiles==0.7.0
 python-docx==0.8.11
 openpyxl==3.0.9
-PyPDF2==1.26.0
+pypdf
 azure-storage-blob==12.9.0
 msal==1.16.0
 office365-rest-python-client==2.3.1

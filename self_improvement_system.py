@@ -14,8 +14,14 @@ Purpose:
 import asyncio
 import tempfile
 import shutil
-import git
-import docker
+try:
+    import git
+except ImportError:
+    git = None
+try:
+    import docker
+except ImportError:
+    docker = None
 from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass
@@ -24,6 +30,7 @@ import subprocess
 import sys
 import importlib
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 from .audit_logger import AuditLogger
 from .enhanced_memory_manager import EnhancedMemoryManager
@@ -49,7 +56,7 @@ class ImprovementProposal:
 class SandboxEnvironment:
     def __init__(self, base_path: Path):
         self.base_path = base_path
-        self.docker_client = docker.from_env()
+        self.docker_client = docker.from_env() if docker else None
         self.active_sandboxes = {}
         
     async def create_sandbox(self, proposal: ImprovementProposal) -> str:
@@ -249,7 +256,7 @@ class SelfImprovementSystem:
             
     async def _create_backup(self) -> Path:
         """Creates system backup"""
-        backup_path = Path("./backups") / f"backup_{datetime.now().isoformat()}"
+        backup_path = Path("./backups") / f"backup_{datetime.now(timezone.utc).isoformat()}"
         shutil.copytree(Path.cwd(), backup_path, ignore=shutil.ignore_patterns('.*'))
         return backup_path
         

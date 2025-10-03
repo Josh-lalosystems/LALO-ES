@@ -23,6 +23,7 @@ import hashlib
 from datetime import datetime
 import resource
 import psutil
+import os
 
 from .audit_logger import AuditLogger
 from .config.self_improvement_config import SANDBOX_SETTINGS
