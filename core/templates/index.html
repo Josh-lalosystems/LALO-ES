@@ -1,9 +1,10 @@
 <!-- Copyright (c) 2025 LALO AI LLC. All rights reserved. -->
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LALO Demo — Core UI</title>
     <style>
         body {
@@ -70,14 +71,11 @@
         <div class="right-panel">
             <h2>Relevant Past Examples</h2>
             {% if rti_response and rti_response.get('retrieved_examples') %}
-                <ul>
-                    {% for ex in rti_response['retrieved_examples'] %}
-                        <li>
+                <ul><li>{%- for ex in rti_response['retrieved_examples'] -%}
                             <strong>Similarity:</strong> {{ "%.2f"|format(ex['similarity']*100) }}%<br>
                             {{ ex['document'] }}
-                        </li>
-                    {% endfor %}
-                </ul>
+                            {%- if not loop.last -%}</li><li>{%- endif -%}
+                {%- endfor -%}</li></ul>
             {% else %}
                 <p>No examples yet. Try submitting a request.</p>
             {% endif %}

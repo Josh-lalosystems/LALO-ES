@@ -1,21 +1,17 @@
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from tool_connector_ui import UiToolConnector
-
-import openai
-import anthropic
-import chromadb
-from chromadb.config import Settings
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Dict, Optional
+
+from .workflow_coordinator import WorkflowCoordinator, WorkflowState
+from .confidence_system import ConfidenceSystem
+from .enhanced_memory_manager import EnhancedMemoryManager
 
 app = FastAPI()
 
-# Initialize ChromaDB client
-chroma_client = chromadb.Client(Settings(
-    persist_directory="./chroma_db"
-))
-collection = chroma_client.get_or_create_collection(name="demo_collection")
+# Initialize components
+workflow_coordinator = WorkflowCoordinator()
 
 # CORS middleware
 app.add_middleware(
@@ -26,28 +22,84 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory storage for API keys (for demo only)
-api_keys = {
-    "openai": None,
-    "anthropic": None
-}
-
-class AuthRequest(BaseModel):
-    client_id: str
-    tenant_id: str
-
-class ChatRequest(BaseModel):
-    provider: str  # 'openai' or 'anthropic'
-    model: str
+class UserRequest(BaseModel):
     message: str
+    context: Optional[Dict] = None
 
+class FeedbackRequest(BaseModel):
+    feedback: Dict
+    stage: WorkflowState
 
-# Advanced: Automatic embedding generation and semantic search
-class AddDocRequest(BaseModel):
-    doc_id: str
-    text: str
+@app.post("/workflow/start")
+async def start_workflow(request: UserRequest):
+    """
+    Initiates a new workflow from user request
+    """
+    try:
+        session_id, context = await workflow_coordinator.start_workflow(request.message)
+        
+        return {
+            "session_id": session_id,
+            "state": context.current_state.value,
+            "interpretation": context.interpretation.__dict__ if context.interpretation else None,
+            "requires_feedback": context.interpretation.feedback_required if context.interpretation else True
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/add_document")
+@app.post("/workflow/{session_id}/feedback")
+async def provide_feedback(
+    session_id: str,
+    feedback_request: FeedbackRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Processes user feedback for current workflow stage
+    """
+    try:
+        context = await workflow_coordinator.process_feedback(
+            session_id,
+            feedback_request.feedback,
+            feedback_request.stage
+        )
+        
+        # Advance workflow in background if no clarification needed
+        background_tasks.add_task(workflow_coordinator.advance_workflow, session_id)
+        
+        return {
+            "session_id": session_id,
+            "state": context.current_state.value,
+            "requires_feedback": context.current_state != WorkflowState.COMPLETED,
+            "next_steps": _get_next_steps(context)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+def _get_next_steps(context) -> Dict:
+    """
+    Determines next steps based on workflow context
+    """
+    if context.current_state == WorkflowState.INTERPRETING:
+        return {
+            "action": "clarify",
+            "points": context.interpretation.suggested_clarifications
+        }
+    elif context.current_state == WorkflowState.PLANNING:
+        return {
+            "action": "review_plan",
+            "plan": context.plan
+        }
+    elif context.current_state == WorkflowState.EXECUTING:
+        return {
+            "action": "monitor_execution",
+            "progress": context.execution_results
+        }
+    elif context.current_state == WorkflowState.REVIEWING:
+        return {
+            "action": "final_review",
+            "results": context.execution_results
+        }
+    return {"action": "complete"}
 def add_document_api(req: AddDocRequest):
     # Generate embedding using OpenAI
     if not api_keys["openai"]:
