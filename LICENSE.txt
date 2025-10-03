@@ -1,0 +1,19 @@
+# Copyright (c) 2025 LALO AI LLC. All rights reserved.
+
+LALO Demo Scaffold — Proprietary License
+
+This project and all source code, documentation, and files in this repository ("Materials")
+are proprietary to LALO AI LLC (the "Company"). All rights reserved.
+
+Use of the Materials is subject to an internal license only and is intended for evaluation,
+development, and demonstration purposes under the control of the Company. You may not
+distribute, publish, sublicense, or otherwise make available the Materials outside of the
+Company without express written permission from LALO AI LLC.
+
+NO WARRANTY. The Materials are provided "AS IS", without warranty of any kind, express or
+implied, including but not limited to the implied warranties of merchantability, fitness
+for a particular purpose, or non-infringement.
+
+If you have been provided these Materials under a separate agreement with LALO AI LLC,
+the terms of that agreement will govern. If you are uncertain about permitted use, contact
+LALO AI LLC legal before proceeding.

@@ -1,0 +1,14 @@
+# Copyright (c) 2025 LALO AI LLC. All rights reserved.
+
+fastapi>=0.95.0
+uvicorn[standard]>=0.22.0
+httpx>=0.24.0
+python-dotenv>=1.0.0
+sqlalchemy>=2.0.0
+pydantic>=1.10.0
+jinja2>=3.1.0
+scikit-learn>=1.2.0
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+playwright==1.35.0
+python-multipart>=0.0.6

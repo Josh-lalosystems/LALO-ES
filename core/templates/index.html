@@ -1,0 +1,87 @@
+<!-- Copyright (c) 2025 LALO AI LLC. All rights reserved. -->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>LALO Demo — Core UI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .left-panel, .right-panel {
+            flex: 1;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .right-panel {
+            max-width: 400px;
+            background-color: #eef3f8;
+        }
+        pre {
+            background-color: #fff;
+            padding: 10px;
+            border: 1px solid #ddd;
+            overflow-x: auto;
+        }
+        h2 {
+            margin-top: 0;
+        }
+        form {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>LALO Demo — Core UI</h1>
+
+    <div class="container">
+        <!-- Left Panel: Input + Output -->
+        <div class="left-panel">
+            <form method="post" action="/interpret">
+                <label for="user_input">Enter request:</label><br>
+                <input type="text" id="user_input" name="user_input" size="60" value="{{ user_input or '' }}">
+                <button type="submit">Interpret</button>
+            </form>
+
+            {% if rti_response %}
+                <h2>RTI Interpretation:</h2>
+                <pre>{{ rti_response | tojson(indent=2) }}</pre>
+                <form method="post" action="/approve_plan">
+                    <input type="hidden" name="plan" value="{{ rti_response.get('plan', '') }}">
+                    <button type="submit">Approve Plan</button>
+                </form>
+            {% endif %}
+
+            {% if mcp_result %}
+                <h2>MCP Result:</h2>
+                <pre>{{ mcp_result | tojson(indent=2) }}</pre>
+            {% endif %}
+        </div>
+
+        <!-- Right Panel: Retrieved Examples -->
+        <div class="right-panel">
+            <h2>Relevant Past Examples</h2>
+            {% if rti_response and rti_response.get('retrieved_examples') %}
+                <ul>
+                    {% for ex in rti_response['retrieved_examples'] %}
+                        <li>
+                            <strong>Similarity:</strong> {{ "%.2f"|format(ex['similarity']*100) }}%<br>
+                            {{ ex['document'] }}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No examples yet. Try submitting a request.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

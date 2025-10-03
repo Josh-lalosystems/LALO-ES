@@ -1,0 +1,58 @@
+# Copyright (c) 2025 LALO AI LLC. All rights reserved.
+#
+# LALO Demo — Docker Compose Orchestration
+
+version: "3.9"
+
+services:
+  core:
+    build: ./core
+    container_name: lalo_core
+    ports:
+      - "8000:8000"
+    environment:
+      RTI_URL: "http://rtinterpreter:8101"
+      MCP_URL: "http://mcp:8102"
+    depends_on:
+      - rtinterpreter
+      - mcp
+
+  rtinterpreter:
+    build: ./rtinterpreter
+    container_name: lalo_rti
+    ports:
+      - "8101:8101"
+
+  mcp:
+    build: ./mcp
+    container_name: lalo_mcp
+    ports:
+      - "8102:8102"
+
+  creation:
+    build: ./creation
+    container_name: lalo_creation
+    ports:
+      - "8103:8103"
+
+  connector_s4:
+    build: ./connectors/mock_s4
+    container_name: lalo_connector_s4
+    ports:
+      - "8201:8201"
+
+  connector_workday:
+    build: ./connectors/mock_workday
+    container_name: lalo_connector_workday
+    ports:
+      - "8202:8202"
+
+  connector_sharepoint:
+    build: ./connectors/mock_sharepoint
+    container_name: lalo_connector_sharepoint
+    ports:
+      - "8203:8203"
+
+networks:
+  default:
+    name: lalo_net
