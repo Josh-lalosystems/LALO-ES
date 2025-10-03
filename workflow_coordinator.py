@@ -101,7 +101,7 @@ class WorkflowCoordinator:
         self.memory_manager.record_feedback(session_id, {
             "stage": stage.value,
             "feedback": feedback,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(datetime.timezone.utc).isoformat()
         })
         
         context.feedback_history.append({

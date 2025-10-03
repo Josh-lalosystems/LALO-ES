@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Enum, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
 import os
 import json
@@ -40,7 +40,7 @@ class User(Base):
 
     id = Column(String, primary_key=True)
     email = Column(String, unique=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     # Relationships
     requests = relationship("Request", back_populates="user")

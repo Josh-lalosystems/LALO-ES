@@ -217,23 +217,7 @@ async def update_admin_settings(
     """Update admin settings"""
     return {"status": "success", "message": "Settings updated successfully"}
 
-@router.post("/keys")
-async def set_api_keys(
-    keys: APIKeyRequest,
-    current_user: str = Depends(get_current_user)
-):
-    """Set API keys for the current user"""
-    try:
-        key_manager.set_keys(current_user, keys)
-        # Initialize models for the user
-        api_keys = key_manager.get_keys(current_user)
-        ai_service.initialize_user_models(current_user, api_keys)
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+# Removed duplicate @router.post("/keys") endpoint to avoid route conflicts.
 
 @router.get("/keys/status")
 async def check_api_keys(
