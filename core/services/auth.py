@@ -67,7 +67,30 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
     """
     # Demo mode: bypass authentication
     if DEMO_MODE:
-        return "demo-user@example.com"
+        user_id = "demo-user@example.com"
+
+        # Auto-provision demo API keys if configured
+        try:
+            from core.services.key_management import key_manager
+            existing_keys = key_manager.get_keys(user_id)
+
+            if not existing_keys:
+                demo_openai = os.getenv("DEMO_OPENAI_KEY", "")
+                demo_anthropic = os.getenv("DEMO_ANTHROPIC_KEY", "")
+
+                if demo_openai or demo_anthropic:
+                    print(f"[DEMO] Auto-provisioning API keys for {user_id}")
+                    key_manager.add_api_key(
+                        user_id,
+                        {
+                            "openai": demo_openai if demo_openai else None,
+                            "anthropic": demo_anthropic if demo_anthropic else None
+                        }
+                    )
+        except Exception as e:
+            print(f"[DEMO] Warning: Could not auto-provision API keys: {e}")
+
+        return user_id
 
     # Production mode: require valid token
     if not credentials:
