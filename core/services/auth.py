@@ -13,7 +13,11 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-here")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-security = HTTPBearer()
+# Demo mode configuration
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+
+# HTTP Bearer security (optional for demo mode)
+security = HTTPBearer(auto_error=not DEMO_MODE)
 
 class AuthService:
     def __init__(self):
@@ -53,24 +57,34 @@ class AuthService:
 # Global auth service instance
 auth_service = AuthService()
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> str:
     """
     Dependency to get the current authenticated user.
-    In development mode, this can be simplified to return a test user.
+    Respects DEMO_MODE environment variable.
+
+    - If DEMO_MODE=true: Returns demo user without authentication
+    - If DEMO_MODE=false: Requires valid JWT token
     """
-    # For development/demo purposes, you can uncomment the line below
-    # to bypass authentication and use a test user
-    # return "demo-user@example.com"
-    
-    # Production authentication
+    # Demo mode: bypass authentication
+    if DEMO_MODE:
+        return "demo-user@example.com"
+
+    # Production mode: require valid token
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     token = credentials.credentials
     user_id = auth_service.verify_token(token)
     return user_id
 
 async def get_current_user_demo() -> str:
     """
-    Demo version that returns a test user without authentication.
-    Use this for development/testing.
+    Demo version that always returns a test user without authentication.
+    Use this for testing/development endpoints that should always bypass auth.
     """
     return "demo-user@example.com"
 
