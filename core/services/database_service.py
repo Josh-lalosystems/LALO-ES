@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import uuid
 
-from ..database import User, Request, UsageRecord, RequestStatus, get_db, SessionLocal
+from ..database import User, Request, UsageRecord, RequestStatus, get_db, SessionLocal, Feedback
 
 class DatabaseService:
     def __init__(self):
@@ -176,6 +176,27 @@ class DatabaseService:
                 )\
                 .order_by(UsageRecord.date.asc())\
                 .all()
+        finally:
+            session.close()
+
+    def save_feedback(self, user_id: str, response_id: str, helpful: bool, reason: str | None = None, details: str | None = None):
+        """Persist a feedback record."""
+        session = self.get_session()
+        try:
+            fb = Feedback(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                response_id=response_id,
+                helpful=helpful,
+                reason=reason,
+                details=details,
+            )
+            session.add(fb)
+            session.commit()
+            return fb
+        except Exception:
+            session.rollback()
+            raise
         finally:
             session.close()
 

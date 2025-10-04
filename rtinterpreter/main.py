@@ -6,6 +6,11 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import random
 import time
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from vector_store import VectorStore
 
 app = FastAPI(title="Recursive Task Interpreter (RTI)")

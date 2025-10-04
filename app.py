@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
+from contextlib import asynccontextmanager
 import uvicorn
 import os
 from dotenv import load_dotenv
@@ -12,53 +13,25 @@ load_dotenv()
 
 # Import our route modules
 from core.routes.ai_routes import router as ai_router
+from core.routes.workflow_routes import router as workflow_router
 from core.services.auth import auth_router
+from core.routes.admin_tools_routes import router as admin_tools_router
 
-# Create FastAPI app
-app = FastAPI(
-    title="LALO AI System",
-    description="Advanced AI-powered business automation platform",
-    version="1.0.0"
-)
-
-# Environment-based configuration
-APP_ENV = os.getenv("APP_ENV", "development")
-DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
-
-# CORS configuration based on environment
-if APP_ENV == "production":
-    # In production, restrict to specific domains
-    allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
-    if not allowed_origins or allowed_origins == [""]:
-        # Fallback to safe default
-        allowed_origins = ["https://your-production-domain.com"]
-else:
-    # Development: allow local frontend
-    allowed_origins = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000"
-    ]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Startup validation
-@app.on_event("startup")
-async def startup_validation():
-    """Validate configuration on startup"""
+# Startup/shutdown event handler using lifespan
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown"""
+    # Startup
     print("="* 60)
     print("LALO AI System - Startup Validation")
     print("="* 60)
 
     warnings = []
     errors = []
+
+    # Environment-based configuration
+    APP_ENV = os.getenv("APP_ENV", "development")
+    DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 
     # Check JWT secret key
     jwt_secret = os.getenv("JWT_SECRET_KEY", "your-secret-key-here")
@@ -101,7 +74,6 @@ async def startup_validation():
 
     # Environment info
     print(f"[INFO] Environment: {APP_ENV}")
-    print(f"[INFO] CORS Origins: {', '.join(allowed_origins)}")
 
     # Print warnings
     if warnings:
@@ -124,9 +96,54 @@ async def startup_validation():
     print("="* 60)
     print()
 
+    yield  # Server runs here
+
+    # Shutdown
+    print("Shutting down LALO AI System...")
+
+# Create FastAPI app with lifespan
+app = FastAPI(
+    title="LALO AI System",
+    description="Advanced AI-powered business automation platform",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Environment-based configuration
+APP_ENV = os.getenv("APP_ENV", "development")
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+
+# CORS configuration based on environment
+if APP_ENV == "production":
+    # In production, restrict to specific domains
+    allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+    if not allowed_origins or allowed_origins == [""]:
+        # Fallback to safe default
+        allowed_origins = ["https://your-production-domain.com"]
+else:
+    # Development: allow local frontend
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000"
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Include routers
 app.include_router(ai_router, tags=["AI Services"])
+app.include_router(workflow_router, tags=["LALO Workflow"])
 app.include_router(auth_router, tags=["Authentication"])
+app.include_router(admin_tools_router, tags=["Admin Tools"])
 
 # Serve static files (React build)
 if os.path.exists("lalo-frontend/build"):

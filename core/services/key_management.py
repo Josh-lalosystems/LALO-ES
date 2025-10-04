@@ -123,7 +123,7 @@ class KeyManager:
                 await client.messages.create(
                     model="claude-3-haiku-20240307",
                     messages=[{"role": "user", "content": "test"}],
-                    max_output_tokens=1  # Minimal cost - just 1 token
+                    max_tokens=1  # Minimal cost - just 1 token
                 )
                 status["anthropic"] = True
             except Exception as e:

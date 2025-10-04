@@ -70,9 +70,10 @@ class AnthropicModel(BaseAIModel):
         self.model = model
 
     async def generate(self, prompt: str, **kwargs) -> str:
-        # Translate common params to Anthropic equivalents
-        if "max_tokens" in kwargs and "max_output_tokens" not in kwargs:
-            kwargs["max_output_tokens"] = kwargs.pop("max_tokens")
+        # Anthropic uses max_tokens parameter (not max_output_tokens)
+        # Ensure we have max_tokens set
+        if "max_tokens" not in kwargs:
+            kwargs["max_tokens"] = 1024  # Default
         response = await self.client.messages.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
@@ -81,9 +82,10 @@ class AnthropicModel(BaseAIModel):
         return response.content[0].text
 
     async def stream(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
-        # Translate common params to Anthropic equivalents
-        if "max_tokens" in kwargs and "max_output_tokens" not in kwargs:
-            kwargs["max_output_tokens"] = kwargs.pop("max_tokens")
+        # Anthropic uses max_tokens parameter (not max_output_tokens)
+        # Ensure we have max_tokens set
+        if "max_tokens" not in kwargs:
+            kwargs["max_tokens"] = 1024  # Default
         response = await self.client.messages.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
@@ -123,12 +125,12 @@ class AIService:
         self.models: Dict[str, Dict[str, BaseAIModel]] = {}
         self.db = database_service
         
-    def initialize_user_models(self, user_id: str, api_keys: dict):
+    def initialize_user_models(self, user_id: str, api_keys: dict, working_keys: dict = None):
         """Initialize models for a specific user with their API keys"""
         self.models[user_id] = {}
 
-        # Initialize OpenAI models
-        if api_keys.get("openai") and OPENAI_AVAILABLE:
+        # Initialize OpenAI models only if key is working
+        if api_keys.get("openai") and OPENAI_AVAILABLE and (working_keys is None or working_keys.get("openai", True)):
             # GPT-4 Turbo - Latest and most capable GPT-4 variant
             self.models[user_id]["gpt-4-turbo-preview"] = OpenAIModel(
                 "gpt-4-turbo-preview",
@@ -140,8 +142,8 @@ class AIService:
                 api_key=api_keys["openai"]
             )
 
-        # Initialize Anthropic models
-        if api_keys.get("anthropic") and ANTHROPIC_AVAILABLE:
+        # Initialize Anthropic models only if key is working
+        if api_keys.get("anthropic") and ANTHROPIC_AVAILABLE and (working_keys is None or working_keys.get("anthropic", True)):
             # Claude 3.5 Sonnet - Latest and most capable Claude model
             self.models[user_id]["claude-3-5-sonnet-20241022"] = AnthropicModel(
                 "claude-3-5-sonnet-20241022",

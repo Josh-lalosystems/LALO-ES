@@ -1,13 +1,28 @@
 # Copyright (c) 2025 LALO AI LLC. All rights reserved.
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import asyncio
 import random
+import sys
+from pathlib import Path
 
-from .chrome_client import check_frontend
-from .settings import settings
-from fastapi import HTTPException
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
+
+try:
+    from chrome_client import check_frontend
+    from settings import settings
+except ImportError:
+    # Fallback if chrome_client doesn't exist
+    async def check_frontend(*args, **kwargs):
+        return {"status": "unavailable", "details": "Chrome client not configured"}
+
+    class Settings:
+        FRONTEND_URL = "http://localhost:8000"
+        FRONTEND_WAIT_SELECTOR = None
+        FRONTEND_TIMEOUT = 5000
+    settings = Settings()
 
 app = FastAPI(title="Model Control Protocol (MCP) — Action Planner")
 

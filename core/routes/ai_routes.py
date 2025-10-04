@@ -10,6 +10,12 @@ from ..services.ai_service import ai_service
 from ..services.auth import get_current_user
 from ..services.database_service import database_service
 from ..services.pricing import calculate_cost, estimate_tokens
+try:
+    from confidence_system import ConfidenceSystem  # type: ignore
+    CONF_SYSTEM_AVAILABLE = True
+except Exception:
+    ConfidenceSystem = None  # type: ignore
+    CONF_SYSTEM_AVAILABLE = False
 
 router = APIRouter(prefix="/api")
 
@@ -25,6 +31,9 @@ class AIResponse(BaseModel):
     model: str
     usage: Dict[str, int]
     created_at: str
+    # Optional explainability additions
+    interpretation: Optional[str] = None
+    confidence: Optional[Dict] = None  # { score: float, reasoning: List[str], clarifications: List[str], feedback_required: bool }
 
 class ModelResponse(BaseModel):
     name: str
@@ -37,6 +46,28 @@ class APIKeyResponse(BaseModel):
     provider: str
     created_at: str
     last_used: Optional[str] = None
+
+class FeedbackRequest(BaseModel):
+    response_id: str
+    helpful: bool
+    reason: Optional[str] = None
+    details: Optional[str] = None
+
+class ImageRequest(BaseModel):
+    prompt: str
+    model: Optional[str] = "gpt-image-1"  # OpenAI Images model
+    size: Optional[str] = "1024x1024"     # 256x256 | 512x512 | 1024x1024
+    n: Optional[int] = 1                   # number of images
+
+class GeneratedImage(BaseModel):
+    b64: str
+    data_url: str
+
+class ImageResponse(BaseModel):
+    id: str
+    created_at: str
+    model: str
+    images: List[GeneratedImage]
 
 @router.post("/ai/chat")
 async def send_ai_request(
@@ -128,7 +159,7 @@ async def send_ai_request(
                     detail=f"AI generation failed: {error_msg}"
                 )
 
-        # Calculate token usage and cost
+    # Calculate token usage and cost
         prompt_tokens = estimate_tokens(request.prompt)
         completion_tokens = estimate_tokens(generated)
         total_tokens = prompt_tokens + completion_tokens
@@ -138,6 +169,27 @@ async def send_ai_request(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens
         )
+
+        # Optional: run confidence/interpretation analysis if models available
+        interpretation: Optional[str] = None
+        confidence_payload: Optional[Dict] = None
+        try:
+            if CONF_SYSTEM_AVAILABLE:
+                available_models = set(ai_service.get_available_models(current_user))
+                # Only run if both OpenAI lightweight and Anthropic confidence models exist
+                if ("gpt-3.5-turbo" in available_models) and ("claude-3-haiku-20240307" in available_models):
+                    cs = ConfidenceSystem(ai_service=ai_service, user_id=current_user)
+                    analysis = await cs.interpret_request(request.prompt)
+                    interpretation = analysis.interpreted_intent
+                    confidence_payload = {
+                        "score": analysis.confidence_score,
+                        "reasoning": analysis.reasoning_trace,
+                        "clarifications": analysis.suggested_clarifications,
+                        "feedback_required": analysis.feedback_required,
+                    }
+        except Exception as e:
+            # Don't fail the request if confidence system fails
+            print(f"ConfidenceSystem warning: {e}")
 
         # Record usage in database
         try:
@@ -161,6 +213,8 @@ async def send_ai_request(
                 "total_tokens": total_tokens
             },
             created_at=datetime.now().isoformat(),
+            interpretation=interpretation,
+            confidence=confidence_payload,
         )
 
     except HTTPException:
@@ -188,14 +242,25 @@ async def get_available_models(
     """Get list of available AI models"""
     try:
         # Ensure models are initialized for this user from stored keys
+        api_keys = key_manager.get_keys(current_user)
         if current_user not in ai_service.models:
             try:
-                api_keys = key_manager.get_keys(current_user)
                 ai_service.initialize_user_models(current_user, api_keys)
             except Exception:
                 pass
-        models = ai_service.get_available_models(current_user)
-        return models
+        else:
+            # Prune models for providers with no keys
+            existing = ai_service.models.get(current_user, {})
+            to_remove = []
+            for name in list(existing.keys()):
+                n = name.lower()
+                should_remove = (("claude" in n and "anthropic" not in api_keys) or
+                                 ("gpt" in n and "openai" not in api_keys))
+                if should_remove:
+                    to_remove.append(name)
+            for m in to_remove:
+                existing.pop(m, None)
+        return ai_service.get_available_models(current_user)
     except Exception as e:
         return ["gpt-4", "gpt-3.5-turbo", "claude-3"]
 
@@ -289,9 +354,26 @@ async def delete_api_key(
         # key_id is formatted as "{provider}_{user}"; extract provider
         provider = key_id.split("_")[0].lower() if "_" in key_id else key_id.lower()
         key_manager.delete_key(current_user, provider)
-        # Also drop initialized model for this provider if present
+        # Also drop initialized models for this provider if present
         if current_user in ai_service.models:
-            to_remove = [m for m in ai_service.models[current_user].keys() if provider in m.lower()]
+            # Match models by common provider prefixes
+            def is_provider_model(name: str) -> bool:
+                n = name.lower()
+                if provider == "anthropic":
+                    return ("claude" in n)
+                if provider == "openai":
+                    return ("gpt" in n)
+                if provider in ("google", "gemini"):
+                    return ("gemini" in n)
+                if provider in ("azure", "azure-openai", "aoai"):
+                    return ("gpt" in n or "azure" in n)
+                if provider in ("huggingface", "hf"):
+                    return ("huggingface" in n or "hf" in n)
+                if provider == "cohere":
+                    return ("cohere" in n)
+                # Generic fallback
+                return provider in n
+            to_remove = [m for m in list(ai_service.models[current_user].keys()) if is_provider_model(m)]
             for m in to_remove:
                 ai_service.models[current_user].pop(m, None)
         return {"status": "success", "message": f"{provider} key deleted successfully"}
@@ -356,6 +438,21 @@ async def get_usage_history(
     except Exception as e:
         # Fallback to empty history
         return []
+
+@router.post("/ai/feedback")
+async def submit_feedback(payload: FeedbackRequest, current_user: str = Depends(get_current_user)):
+    """Accept lightweight feedback on AI responses for UX metrics and model tuning."""
+    try:
+        database_service.save_feedback(
+            user_id=current_user,
+            response_id=payload.response_id,
+            helpful=payload.helpful,
+            reason=payload.reason,
+            details=payload.details,
+        )
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Admin Endpoints
 @router.get("/admin/users")
@@ -425,6 +522,71 @@ async def list_models(
         )
         for model in models
     ]
+
+@router.post("/ai/image", response_model=ImageResponse)
+async def generate_image(
+    request: ImageRequest,
+    current_user: str = Depends(get_current_user)
+):
+    """Generate image(s) with OpenAI Images API (OpenAI-only)."""
+    # Ensure OpenAI key exists
+    keys = key_manager.get_keys(current_user)
+    openai_key = keys.get("openai")
+    if not openai_key:
+        raise HTTPException(status_code=400, detail="OpenAI API key not configured. Add it in Settings.")
+
+    # Lazy import to avoid hard dependency
+    try:
+        from openai import AsyncOpenAI  # type: ignore
+    except Exception:
+        raise HTTPException(status_code=500, detail="openai package not installed on server.")
+
+    try:
+        client = AsyncOpenAI(api_key=openai_key)
+        # OpenAI v1 Images API
+        result = await client.images.generate(
+            model=request.model or "gpt-image-1",
+            prompt=request.prompt,
+            size=request.size or "1024x1024",
+            n=request.n or 1,
+        )
+        images: List[GeneratedImage] = []
+        # result.data is a list with objects that may contain b64_json
+        for item in getattr(result, "data", []) or []:
+            b64 = getattr(item, "b64_json", None)
+            if not b64:
+                # If the API returned URLs instead (rare in v1), skip or convert
+                url = getattr(item, "url", None)
+                if url:
+                    images.append(GeneratedImage(b64="", data_url=url))
+                continue
+            data_url = f"data:image/png;base64,{b64}"
+            images.append(GeneratedImage(b64=b64, data_url=data_url))
+
+        if not images:
+            raise HTTPException(status_code=502, detail="No images returned by provider.")
+
+        # Optionally record usage (no token counts). Cost estimation omitted.
+        try:
+            database_service.record_usage(
+                user_id=current_user,
+                model=request.model or "gpt-image-1",
+                tokens_used=0,
+                cost=0.0,
+            )
+        except Exception as e:
+            print(f"Note: failed to record image usage: {e}")
+
+        return ImageResponse(
+            id=str(uuid4()),
+            created_at=datetime.now().isoformat(),
+            model=request.model or "gpt-image-1",
+            images=images,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image generation failed: {e}")
 
 @router.post("/request")
 async def create_request(
