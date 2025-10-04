@@ -7,8 +7,14 @@ from sqlalchemy.orm import sessionmaker
 import json
 import os
 from cryptography.fernet import Fernet
-from openai import AsyncOpenAI
-from anthropic import AsyncAnthropic
+try:
+    from openai import AsyncOpenAI
+except Exception:
+    AsyncOpenAI = None  # type: ignore
+try:
+    from anthropic import AsyncAnthropic
+except Exception:
+    AsyncAnthropic = None  # type: ignore
 
 # Initialize encryption
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY") or Fernet.generate_key()
@@ -18,8 +24,13 @@ fernet = Fernet(ENCRYPTION_KEY)
 from ..database import Base, SessionLocal, engine, APIKeys
 
 class APIKeyRequest(BaseModel):
-    openai_key: Optional[SecretStr]
-    anthropic_key: Optional[SecretStr]
+    openai_key: Optional[SecretStr] = None
+    anthropic_key: Optional[SecretStr] = None
+    google_key: Optional[SecretStr] = None
+    azure_key: Optional[SecretStr] = None
+    huggingface_key: Optional[SecretStr] = None
+    cohere_key: Optional[SecretStr] = None
+    custom_key: Optional[SecretStr] = None
     # Add other API keys as needed
 
 class KeyManager:
@@ -49,6 +60,16 @@ class KeyManager:
                 current_keys["openai"] = keys.openai_key.get_secret_value()
             if keys.anthropic_key:
                 current_keys["anthropic"] = keys.anthropic_key.get_secret_value()
+            if keys.google_key:
+                current_keys["google"] = keys.google_key.get_secret_value()
+            if keys.azure_key:
+                current_keys["azure"] = keys.azure_key.get_secret_value()
+            if keys.huggingface_key:
+                current_keys["huggingface"] = keys.huggingface_key.get_secret_value()
+            if keys.cohere_key:
+                current_keys["cohere"] = keys.cohere_key.get_secret_value()
+            if keys.custom_key:
+                current_keys["custom"] = keys.custom_key.get_secret_value()
             
             record.keys = current_keys
             db.commit()
@@ -81,7 +102,7 @@ class KeyManager:
         keys = self.get_keys(user_id)
         status: Dict[str, bool] = {}
 
-        if "openai" in keys:
+        if "openai" in keys and AsyncOpenAI is not None:
             try:
                 client = AsyncOpenAI(api_key=keys["openai"])
                 # Make a minimal test call with minimal cost
@@ -95,14 +116,14 @@ class KeyManager:
                 print(f"OpenAI key validation failed: {str(e)}")
                 status["openai"] = False
 
-        if "anthropic" in keys:
+        if "anthropic" in keys and AsyncAnthropic is not None:
             try:
                 client = AsyncAnthropic(api_key=keys["anthropic"])
                 # Use Haiku for testing - fastest and cheapest
                 await client.messages.create(
                     model="claude-3-haiku-20240307",
                     messages=[{"role": "user", "content": "test"}],
-                    max_tokens=1  # Minimal cost - just 1 token
+                    max_output_tokens=1  # Minimal cost - just 1 token
                 )
                 status["anthropic"] = True
             except Exception as e:

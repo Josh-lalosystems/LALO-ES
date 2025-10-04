@@ -70,6 +70,9 @@ class AnthropicModel(BaseAIModel):
         self.model = model
 
     async def generate(self, prompt: str, **kwargs) -> str:
+        # Translate common params to Anthropic equivalents
+        if "max_tokens" in kwargs and "max_output_tokens" not in kwargs:
+            kwargs["max_output_tokens"] = kwargs.pop("max_tokens")
         response = await self.client.messages.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
@@ -78,6 +81,9 @@ class AnthropicModel(BaseAIModel):
         return response.content[0].text
 
     async def stream(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
+        # Translate common params to Anthropic equivalents
+        if "max_tokens" in kwargs and "max_output_tokens" not in kwargs:
+            kwargs["max_output_tokens"] = kwargs.pop("max_tokens")
         response = await self.client.messages.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
@@ -113,7 +119,7 @@ class LocalLLaMAModel(BaseAIModel):
             yield chunk['choices'][0]['text']
 
 class AIService:
-    def __init__(self, database_service):
+    def __init__(self, database_service=None):
         self.models: Dict[str, Dict[str, BaseAIModel]] = {}
         self.db = database_service
         
@@ -175,6 +181,6 @@ class AIService:
             return await self.models[user_id][model_name].generate(prompt, **kwargs)
 
 
-# Create global service instances
-from .database_service import database_service
-ai_service = AIService(database_service)
+# Create global service instance without database_service initially
+# Database service will be set later to avoid circular imports
+ai_service = AIService()

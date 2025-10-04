@@ -158,10 +158,17 @@ async def add_api_key(
             key_data["anthropic_key"] = request.key
         elif provider_lower in ["google", "gemini"]:
             key_data["google_key"] = request.key
+        elif provider_lower in ["azure", "azure-openai", "aoai"]:
+            key_data["azure_key"] = request.key
+        elif provider_lower in ["huggingface", "hf"]:
+            key_data["huggingface_key"] = request.key
+        elif provider_lower in ["cohere"]:
+            key_data["cohere_key"] = request.key
+        elif provider_lower in ["custom", "other"]:
+            key_data["custom_key"] = request.key
         else:
-            # For other providers, we can default to a known compatible type or handle as a 'custom' key
-            # For simplicity, we'll treat unrecognized providers as potentially OpenAI-compatible.
-            key_data["openai_key"] = request.key
+            # Unrecognized providers go to a generic custom slot
+            key_data["custom_key"] = request.key
 
         if not key_data:
             raise HTTPException(status_code=400, detail="Unsupported or empty provider specified")
