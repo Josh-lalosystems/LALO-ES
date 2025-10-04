@@ -22,6 +22,7 @@ fernet = Fernet(ENCRYPTION_KEY)
 
 # Database setup - use shared database
 from ..database import Base, SessionLocal, engine, APIKeys
+from .secrets_manager import secrets_manager
 
 class APIKeyRequest(BaseModel):
     openai_key: Optional[SecretStr] = None
@@ -39,7 +40,17 @@ class KeyManager:
         return SessionLocal()
     
     def get_keys(self, user_id: str) -> Dict[str, str]:
-        """Get API keys for a user"""
+        """Get API keys for a user, prefer secrets manager, fallback to APIKeys table"""
+        # Attempt to read from secrets store first
+        keys: Dict[str, str] = {}
+        for provider in ("openai", "anthropic", "google", "azure", "huggingface", "cohere", "custom"):
+            val = secrets_manager.get_secret(name=f"api_key:{provider}", user_id=user_id)
+            if val:
+                keys[provider] = val
+        if keys:
+            return keys
+
+        # Fallback to legacy encrypted table
         with self.get_session() as db:
             record = db.query(APIKeys).filter(APIKeys.user_id == user_id).first()
             if not record:
@@ -47,14 +58,29 @@ class KeyManager:
             return record.keys
     
     def set_keys(self, user_id: str, keys: APIKeyRequest):
-        """Store or update API keys for a user"""
+        """Store or update API keys for a user in secrets store and keep legacy table in sync."""
+        # Write to secrets store
+        if keys.openai_key:
+            secrets_manager.set_secret("api_key:openai", keys.openai_key.get_secret_value(), user_id)
+        if keys.anthropic_key:
+            secrets_manager.set_secret("api_key:anthropic", keys.anthropic_key.get_secret_value(), user_id)
+        if keys.google_key:
+            secrets_manager.set_secret("api_key:google", keys.google_key.get_secret_value(), user_id)
+        if keys.azure_key:
+            secrets_manager.set_secret("api_key:azure", keys.azure_key.get_secret_value(), user_id)
+        if keys.huggingface_key:
+            secrets_manager.set_secret("api_key:huggingface", keys.huggingface_key.get_secret_value(), user_id)
+        if keys.cohere_key:
+            secrets_manager.set_secret("api_key:cohere", keys.cohere_key.get_secret_value(), user_id)
+        if keys.custom_key:
+            secrets_manager.set_secret("api_key:custom", keys.custom_key.get_secret_value(), user_id)
+
+        # Also update legacy encrypted table for backward compatibility
         with self.get_session() as db:
             record = db.query(APIKeys).filter(APIKeys.user_id == user_id).first()
             if not record:
                 record = APIKeys(user_id=user_id)
                 db.add(record)
-            
-            # Update existing keys dictionary
             current_keys = record.keys
             if keys.openai_key:
                 current_keys["openai"] = keys.openai_key.get_secret_value()
@@ -70,12 +96,15 @@ class KeyManager:
                 current_keys["cohere"] = keys.cohere_key.get_secret_value()
             if keys.custom_key:
                 current_keys["custom"] = keys.custom_key.get_secret_value()
-            
             record.keys = current_keys
             db.commit()
     
     def delete_keys(self, user_id: str):
         """Delete all API keys for a user"""
+        # delete from secrets store
+        for provider in ("openai", "anthropic", "google", "azure", "huggingface", "cohere", "custom"):
+            secrets_manager.delete_secret(name=f"api_key:{provider}", user_id=user_id)
+        # delete legacy
         with self.get_session() as db:
             record = db.query(APIKeys).filter(APIKeys.user_id == user_id).first()
             if record:
@@ -85,6 +114,9 @@ class KeyManager:
     def delete_key(self, user_id: str, provider: str):
         """Delete a specific provider key for a user"""
         provider = provider.lower()
+        # delete from secrets store
+        secrets_manager.delete_secret(name=f"api_key:{provider}", user_id=user_id)
+        # delete from legacy
         with self.get_session() as db:
             record = db.query(APIKeys).filter(APIKeys.user_id == user_id).first()
             if record:

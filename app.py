@@ -16,6 +16,11 @@ from core.routes.ai_routes import router as ai_router
 from core.routes.workflow_routes import router as workflow_router
 from core.services.auth import auth_router
 from core.routes.admin_tools_routes import router as admin_tools_router
+from core.routes.agent_routes import router as agent_router
+from core.middleware.auth_middleware import RBACMiddleware
+from core.routes.rbac_routes import router as rbac_router
+from core.routes.audit_routes import router as audit_router
+from core.routes.connector_routes import router as connector_router
 
 # Startup/shutdown event handler using lifespan
 @asynccontextmanager
@@ -139,11 +144,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Attach RBAC middleware to enrich requests with permissions from RBAC service
+app.add_middleware(RBACMiddleware)
+
 # Include routers
 app.include_router(ai_router, tags=["AI Services"])
 app.include_router(workflow_router, tags=["LALO Workflow"])
 app.include_router(auth_router, tags=["Authentication"])
 app.include_router(admin_tools_router, tags=["Admin Tools"])
+app.include_router(agent_router, tags=["Agents"])
+app.include_router(rbac_router, tags=["RBAC"])
+app.include_router(audit_router, tags=["Audit"])
+app.include_router(connector_router, tags=["Connectors"])
 
 # Serve static files (React build)
 if os.path.exists("lalo-frontend/build"):

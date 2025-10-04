@@ -12,6 +12,7 @@ The registry:
 
 from typing import Dict, List, Optional, Type
 from core.tools.base import BaseTool, ToolExecutionResult, ToolDefinition
+from core.services.data_governor import data_governor
 import logging
 
 logger = logging.getLogger(__name__)
@@ -193,6 +194,18 @@ class ToolRegistry:
                 success=False,
                 error=f"Insufficient permissions to use tool '{tool_name}'. Required: {required_perms}"
             )
+
+        # Governance policy evaluation (deny list and required permissions)
+        try:
+            tool_category = tool.tool_definition.category
+            decision = data_governor.evaluate(user_permissions=user_perms, tool_category=tool_category, tool_name=tool_name)
+            if not decision.get("allowed", True):
+                return ToolExecutionResult(
+                    success=False,
+                    error=f"Action blocked by governance policy: {'; '.join(decision.get('reasons', []))}"
+                )
+        except Exception as e:
+            logger.error(f"Governance evaluation error for {tool_name}: {e}")
 
         # Execute tool with validation
         try:

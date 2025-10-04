@@ -1,3 +1,32 @@
+# LALO AI Platform
+
+## Overview
+LALO is a workflow automation and chat platform for professional agents, investors, and end users. It features:
+- Professional chat UI (see `lalo-frontend/src/components/Chat/`)
+- Data connectors (SharePoint, Cloud, Database)
+- Workflow automation
+- Feedback and continuous learning
+- Demo data and scripts
+
+## Getting Started
+- See [`docs/USER_MANUAL.md`](docs/USER_MANUAL.md) for instructions
+- See [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) for deployment
+- Seed demo data: `python scripts/seed_demo_data.py`
+
+## Demo & Documentation
+- Demo walkthrough: [`docs/demo/DEMO_SCRIPT.md`](docs/demo/DEMO_SCRIPT.md)
+- Use cases: [`docs/demo/USE_CASES.md`](docs/demo/USE_CASES.md)
+- Investor pitch: [`docs/demo/INVESTOR_PITCH.md`](docs/demo/INVESTOR_PITCH.md)
+
+## API Reference
+- See [`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md)
+
+## Parallel Work Completion
+This codebase implements Steps 27–43 in parallel:
+- Backend: Data connectors, feedback, learning engine, API endpoints
+- Frontend: Professional chat UI, streaming, workflow visualization, demo scripts
+
+All documentation and demo scripts are included for rapid onboarding and testing.
 # Copyright (c) 2025 LALO AI LLC. All rights reserved.
 
 # LALO Demo MVP — Repository Overview

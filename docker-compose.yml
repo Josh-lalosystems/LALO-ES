@@ -1,0 +1,18 @@
+version: '3.8'
+services:
+  backend:
+    build: .
+    command: python -m uvicorn app:app --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONIOENCODING=utf-8
+  frontend:
+    build: ./lalo-frontend
+    command: npm start
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./lalo-frontend:/app
