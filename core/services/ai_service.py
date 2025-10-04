@@ -1,8 +1,20 @@
 from typing import Optional, Dict, Any, List, Union, AsyncGenerator
 from abc import ABC, abstractmethod
 import os
-from openai import AsyncOpenAI
-from anthropic import AsyncAnthropic
+# Optional provider SDK imports
+try:
+    from openai import AsyncOpenAI  # type: ignore
+    OPENAI_AVAILABLE = True
+except Exception:
+    AsyncOpenAI = None  # type: ignore
+    OPENAI_AVAILABLE = False
+
+try:
+    from anthropic import AsyncAnthropic  # type: ignore
+    ANTHROPIC_AVAILABLE = True
+except Exception:
+    AsyncAnthropic = None  # type: ignore
+    ANTHROPIC_AVAILABLE = False
 import asyncio
 from dotenv import load_dotenv
 
@@ -26,6 +38,8 @@ class BaseAIModel(ABC):
 
 class OpenAIModel(BaseAIModel):
     def __init__(self, model: str = "gpt-4", api_key: str = None):
+        if not OPENAI_AVAILABLE:
+            raise ImportError("openai package is not installed. Install it or remove OpenAI usage.")
         self.client = AsyncOpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
         self.model = model
 
@@ -50,6 +64,8 @@ class OpenAIModel(BaseAIModel):
 
 class AnthropicModel(BaseAIModel):
     def __init__(self, model: str = "claude-2", api_key: str = None):
+        if not ANTHROPIC_AVAILABLE:
+            raise ImportError("anthropic package is not installed. Install it or remove Anthropic usage.")
         self.client = AsyncAnthropic(api_key=api_key or os.getenv("ANTHROPIC_API_KEY"))
         self.model = model
 
@@ -104,18 +120,35 @@ class AIService:
     def initialize_user_models(self, user_id: str, api_keys: dict):
         """Initialize models for a specific user with their API keys"""
         self.models[user_id] = {}
-        
+
         # Initialize OpenAI models
-        if api_keys.get("openai"):
+        if api_keys.get("openai") and OPENAI_AVAILABLE:
+            # GPT-4 Turbo - Latest and most capable GPT-4 variant
+            self.models[user_id]["gpt-4-turbo-preview"] = OpenAIModel(
+                "gpt-4-turbo-preview",
+                api_key=api_keys["openai"]
+            )
+            # GPT-3.5 Turbo - Fast and cost-effective
             self.models[user_id]["gpt-3.5-turbo"] = OpenAIModel(
                 "gpt-3.5-turbo",
                 api_key=api_keys["openai"]
             )
 
         # Initialize Anthropic models
-        if api_keys.get("anthropic"):
-            self.models[user_id]["claude-instant-1"] = AnthropicModel(
-                "claude-instant-1",
+        if api_keys.get("anthropic") and ANTHROPIC_AVAILABLE:
+            # Claude 3.5 Sonnet - Latest and most capable Claude model
+            self.models[user_id]["claude-3-5-sonnet-20241022"] = AnthropicModel(
+                "claude-3-5-sonnet-20241022",
+                api_key=api_keys["anthropic"]
+            )
+            # Claude 3 Opus - Most capable Claude 3 model
+            self.models[user_id]["claude-3-opus-20240229"] = AnthropicModel(
+                "claude-3-opus-20240229",
+                api_key=api_keys["anthropic"]
+            )
+            # Claude 3 Haiku - Fastest and most cost-effective
+            self.models[user_id]["claude-3-haiku-20240307"] = AnthropicModel(
+                "claude-3-haiku-20240307",
                 api_key=api_keys["anthropic"]
             )
             

@@ -4,6 +4,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 import uvicorn
 import os
+from dotenv import load_dotenv
+from cryptography.fernet import Fernet
+
+# Load environment variables
+load_dotenv()
 
 # Import our route modules
 from core.routes.ai_routes import router as ai_router
@@ -16,14 +21,108 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware
+# Environment-based configuration
+APP_ENV = os.getenv("APP_ENV", "development")
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+
+# CORS configuration based on environment
+if APP_ENV == "production":
+    # In production, restrict to specific domains
+    allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+    if not allowed_origins or allowed_origins == [""]:
+        # Fallback to safe default
+        allowed_origins = ["https://your-production-domain.com"]
+else:
+    # Development: allow local frontend
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000"
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # React dev server
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Startup validation
+@app.on_event("startup")
+async def startup_validation():
+    """Validate configuration on startup"""
+    print("="* 60)
+    print("LALO AI System - Startup Validation")
+    print("="* 60)
+
+    warnings = []
+    errors = []
+
+    # Check JWT secret key
+    jwt_secret = os.getenv("JWT_SECRET_KEY", "your-secret-key-here")
+    if jwt_secret == "your-secret-key-here":
+        if APP_ENV == "production":
+            errors.append("JWT_SECRET_KEY must be changed from default in production")
+        else:
+            warnings.append("JWT_SECRET_KEY is using default value (OK for development)")
+    else:
+        print("[OK] JWT_SECRET_KEY is configured")
+
+    # Check encryption key
+    encryption_key = os.getenv("ENCRYPTION_KEY")
+    if not encryption_key:
+        warnings.append("ENCRYPTION_KEY not set - API keys will not be encrypted properly")
+        warnings.append("   Run 'python scripts/init_db.py' to generate one")
+    else:
+        try:
+            # Validate it's a valid Fernet key
+            Fernet(encryption_key.encode())
+            print("[OK] ENCRYPTION_KEY is valid")
+        except Exception as e:
+            errors.append(f"ENCRYPTION_KEY is invalid: {e}")
+
+    # Check demo mode
+    if DEMO_MODE:
+        warnings.append("DEMO_MODE is enabled - authentication is bypassed!")
+        warnings.append("   Set DEMO_MODE=false in .env for production")
+        print("[WARNING] Running in DEMO MODE - authentication bypassed")
+    else:
+        print("[OK] DEMO_MODE is disabled")
+
+    # Check database exists
+    db_path = "lalo.db"
+    if not os.path.exists(db_path):
+        warnings.append(f"Database not found at {db_path}")
+        warnings.append("   Run 'python scripts/init_db.py' to create it")
+    else:
+        print(f"[OK] Database found at {db_path}")
+
+    # Environment info
+    print(f"[INFO] Environment: {APP_ENV}")
+    print(f"[INFO] CORS Origins: {', '.join(allowed_origins)}")
+
+    # Print warnings
+    if warnings:
+        print("\n" + "="* 60)
+        print("WARNINGS:")
+        for warning in warnings:
+            print(f"  [!] {warning}")
+
+    # Print errors and exit if critical
+    if errors:
+        print("\n" + "="* 60)
+        print("ERRORS:")
+        for error in errors:
+            print(f"  [X] {error}")
+        print("="* 60)
+        raise RuntimeError("Configuration errors detected - see above")
+
+    print("="* 60)
+    print("[SUCCESS] Startup validation complete")
+    print("="* 60)
+    print()
 
 # Include routers
 app.include_router(ai_router, tags=["AI Services"])
@@ -35,11 +134,16 @@ if os.path.exists("lalo-frontend/build"):
 
 @app.get("/")
 async def root():
-    """Root endpoint"""
+    """Serve SPA index if built; otherwise return API status."""
+    index_path = os.path.join("lalo-frontend", "build", "index.html")
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
     return {
         "message": "LALO AI System API",
         "version": "1.0.0",
-        "status": "operational"
+        "status": "operational",
+        "note": "Frontend build not found; run npm run build in lalo-frontend."
     }
 
 @app.get("/health")
@@ -50,9 +154,10 @@ async def health_check():
 # Serve React app for any unmatched routes (SPA routing)
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str):
-    """Serve React app for frontend routes"""
-    if os.path.exists("lalo-frontend/build/index.html"):
-        with open("lalo-frontend/build/index.html") as f:
+    """Serve SPA index for any unmatched routes (client-side routing)."""
+    index_path = os.path.join("lalo-frontend", "build", "index.html")
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     return {"message": "Frontend not built. Run 'npm run build' in lalo-frontend directory."}
 

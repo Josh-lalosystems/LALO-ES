@@ -60,38 +60,55 @@ class KeyManager:
             if record:
                 db.delete(record)
                 db.commit()
+
+    def delete_key(self, user_id: str, provider: str):
+        """Delete a specific provider key for a user"""
+        provider = provider.lower()
+        with self.get_session() as db:
+            record = db.query(APIKeys).filter(APIKeys.user_id == user_id).first()
+            if record:
+                data = record.keys
+                if provider in data:
+                    del data[provider]
+                    record.keys = data
+                    db.commit()
+                else:
+                    # Nothing to delete; no-op
+                    pass
     
     async def validate_keys(self, user_id: str) -> Dict[str, bool]:
         """Validate that stored API keys are working"""
         keys = self.get_keys(user_id)
-        status = {}
-        
+        status: Dict[str, bool] = {}
+
         if "openai" in keys:
-            # Test OpenAI key
             try:
                 client = AsyncOpenAI(api_key=keys["openai"])
+                # Make a minimal test call with minimal cost
                 await client.chat.completions.create(
                     model="gpt-3.5-turbo",
                     messages=[{"role": "user", "content": "test"}],
-                    max_tokens=5
+                    max_tokens=1  # Minimal cost - just 1 token
                 )
                 status["openai"] = True
-            except:
+            except Exception as e:
+                print(f"OpenAI key validation failed: {str(e)}")
                 status["openai"] = False
-        
+
         if "anthropic" in keys:
-            # Test Anthropic key
             try:
                 client = AsyncAnthropic(api_key=keys["anthropic"])
+                # Use Haiku for testing - fastest and cheapest
                 await client.messages.create(
-                    model="claude-instant-1",
+                    model="claude-3-haiku-20240307",
                     messages=[{"role": "user", "content": "test"}],
-                    max_tokens=5
+                    max_tokens=1  # Minimal cost - just 1 token
                 )
                 status["anthropic"] = True
-            except:
+            except Exception as e:
+                print(f"Anthropic key validation failed: {str(e)}")
                 status["anthropic"] = False
-        
+
         return status
 
 # Global instance

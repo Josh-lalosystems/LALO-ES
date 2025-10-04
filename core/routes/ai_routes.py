@@ -7,6 +7,7 @@ from uuid import uuid4
 from ..services.key_management import key_manager, APIKeyRequest
 from ..services.ai_service import ai_service
 from ..services.auth import get_current_user
+from ..services.database_service import database_service
 
 router = APIRouter(prefix="/api")
 
@@ -65,6 +66,17 @@ async def send_ai_request(
             max_tokens=request.max_tokens,
             temperature=request.temperature,
         )
+        # Optional: record usage with a rough token estimate until real usage is available
+        try:
+            estimated_tokens = min(len(request.prompt.split()) * 1.3 + len(str(generated).split()) * 1.3, request.max_tokens or 1000)
+            database_service.record_usage(
+                user_id=current_user,
+                model=model,
+                tokens_used=int(estimated_tokens),
+                cost=0.0,  # TODO: compute based on provider pricing
+            )
+        except Exception:
+            pass
         return AIResponse(
             id=str(uuid4()),
             response=generated,
@@ -125,38 +137,56 @@ async def get_api_keys(
     except Exception as e:
         return []
 
-@router.post("/keys")
+class AddKeyRequest(BaseModel):
+    name: str
+    provider: str
+    key: str
+
+@router.post("/keys", status_code=status.HTTP_201_CREATED)
 async def add_api_key(
-    name: str,
-    provider: str,
-    key: str,
+    request: AddKeyRequest,
     current_user: str = Depends(get_current_user)
 ):
     """Add a new API key"""
     try:
-        # Create APIKeyRequest object with correct field names
         key_data = {}
-        if provider.lower() in ["openai", "gpt", "gpt-4", "gpt-3.5"]:
-            key_data["openai_key"] = key
-        elif provider.lower() in ["anthropic", "claude"]:
-            key_data["anthropic_key"] = key
+        provider_lower = request.provider.lower()
+        
+        if provider_lower in ["openai", "gpt", "gpt-4", "gpt-3.5"]:
+            key_data["openai_key"] = request.key
+        elif provider_lower in ["anthropic", "claude"]:
+            key_data["anthropic_key"] = request.key
+        elif provider_lower in ["google", "gemini"]:
+            key_data["google_key"] = request.key
         else:
-            # For other providers, default to storing as OpenAI for now
-            # This allows frontend to send other provider names without failing
-            key_data["openai_key"] = key
+            # For other providers, we can default to a known compatible type or handle as a 'custom' key
+            # For simplicity, we'll treat unrecognized providers as potentially OpenAI-compatible.
+            key_data["openai_key"] = request.key
+
+        if not key_data:
+            raise HTTPException(status_code=400, detail="Unsupported or empty provider specified")
 
         key_request = APIKeyRequest(**key_data)
         key_manager.set_keys(current_user, key_request)
-        # Initialize user models now that keys are available
+        
+        # Asynchronously initialize or update models for the user
         try:
-            ai_service.initialize_user_models(current_user, key_manager.get_keys(current_user))
-        except Exception:
-            pass
-        return {"status": "success", "message": f"{provider} key added successfully"}
+            api_keys = key_manager.get_keys(current_user)
+            ai_service.initialize_user_models(current_user, api_keys)
+        except Exception as e:
+            # Log this error but don't fail the entire request, as the key is already saved.
+            # A more robust system might use a background task queue here.
+            print(f"Note: Error initializing models for user {current_user} after adding key: {e}")
+            
+        return {"status": "success", "message": f"{request.provider} key added successfully"}
+    except HTTPException as e:
+        # Re-raise known HTTP exceptions
+        raise e
     except Exception as e:
+        # Catch any other unexpected errors
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=f"An unexpected error occurred while adding the key: {e}"
         )
 
 @router.delete("/keys/{key_id}")
@@ -165,7 +195,18 @@ async def delete_api_key(
     current_user: str = Depends(get_current_user)
 ):
     """Delete an API key"""
-    return {"status": "success", "message": "Key deleted successfully"}
+    try:
+        # key_id is formatted as "{provider}_{user}"; extract provider
+        provider = key_id.split("_")[0].lower() if "_" in key_id else key_id.lower()
+        key_manager.delete_key(current_user, provider)
+        # Also drop initialized model for this provider if present
+        if current_user in ai_service.models:
+            to_remove = [m for m in ai_service.models[current_user].keys() if provider in m.lower()]
+            for m in to_remove:
+                ai_service.models[current_user].pop(m, None)
+        return {"status": "success", "message": f"{provider} key deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/keys/{key_id}/test")
 async def test_api_key(
@@ -173,7 +214,12 @@ async def test_api_key(
     current_user: str = Depends(get_current_user)
 ):
     """Test an API key"""
-    return {"status": "success", "valid": True}
+    try:
+        provider = key_id.split("_")[0].lower() if "_" in key_id else key_id.lower()
+        status_map = await key_manager.validate_keys(current_user)
+        return {"status": "success", "provider": provider, "valid": bool(status_map.get(provider))}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Usage Statistics Endpoints
 class UsageStats(BaseModel):
@@ -204,7 +250,22 @@ async def get_usage_history(
     current_user: str = Depends(get_current_user)
 ):
     """Get usage history for specified number of days"""
-    return []
+    try:
+        records = database_service.get_usage_stats(current_user, days=days)
+        # Map to frontend-friendly shape
+        return [
+            {
+                "date": (r.date.isoformat() if hasattr(r.date, "isoformat") else str(r.date)),
+                "model": r.model,
+                "tokens": r.tokens_used,
+                "requests": r.requests_count,
+                "cost": r.cost,
+            }
+            for r in records
+        ]
+    except Exception as e:
+        # Fallback to empty history
+        return []
 
 # Admin Endpoints
 @router.get("/admin/users")
