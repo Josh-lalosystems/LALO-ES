@@ -3,11 +3,13 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 from uuid import uuid4
+import asyncio
 
 from ..services.key_management import key_manager, APIKeyRequest
 from ..services.ai_service import ai_service
 from ..services.auth import get_current_user
 from ..services.database_service import database_service
+from ..services.pricing import calculate_cost, estimate_tokens
 
 router = APIRouter(prefix="/api")
 
@@ -41,53 +43,134 @@ async def send_ai_request(
     request: AIRequest,
     current_user: str = Depends(get_current_user)
 ) -> AIResponse:
-    """Send a request to AI models"""
+    """
+    Send a request to AI models with comprehensive error handling.
+
+    Includes:
+    - Automatic model initialization
+    - Request timeout (60 seconds)
+    - Usage tracking with cost calculation
+    - Detailed error messages
+    """
     try:
         # Ensure user models are initialized based on stored keys
         if current_user not in ai_service.models:
             try:
                 api_keys = key_manager.get_keys(current_user)
+                if not api_keys:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="No API keys configured. Please add your API keys in Settings to use AI models."
+                    )
                 ai_service.initialize_user_models(current_user, api_keys)
-            except Exception:
-                pass
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to initialize AI models: {str(e)}"
+                )
 
+        # Get available models and select one
         available = ai_service.get_available_models(current_user)
         model = request.model or (available[0] if available else None)
-        if not available or not model or model not in available:
+
+        if not available:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No available models for this user. Add API keys first or choose a valid model."
+                detail="No models available. Please add API keys in Settings."
             )
 
-        generated = await ai_service.generate(
-            request.prompt,
-            model_name=model,
-            user_id=current_user,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-        )
-        # Optional: record usage with a rough token estimate until real usage is available
+        if not model or model not in available:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Model '{model}' not available. Available models: {', '.join(available)}"
+            )
+
+        # Generate response with timeout protection
         try:
-            estimated_tokens = min(len(request.prompt.split()) * 1.3 + len(str(generated).split()) * 1.3, request.max_tokens or 1000)
+            generated = await asyncio.wait_for(
+                ai_service.generate(
+                    request.prompt,
+                    model_name=model,
+                    user_id=current_user,
+                    max_tokens=request.max_tokens,
+                    temperature=request.temperature,
+                ),
+                timeout=60.0  # 60 second timeout
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="AI request timed out after 60 seconds. Please try again with a shorter prompt or lower max_tokens."
+            )
+        except Exception as e:
+            error_msg = str(e)
+            # Provider-specific error handling
+            if "api key" in error_msg.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="API key authentication failed. Please check your API keys in Settings."
+                )
+            elif "rate limit" in error_msg.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Rate limit exceeded. Please wait a moment and try again."
+                )
+            elif "quota" in error_msg.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="API quota exceeded. Please check your provider account."
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"AI generation failed: {error_msg}"
+                )
+
+        # Calculate token usage and cost
+        prompt_tokens = estimate_tokens(request.prompt)
+        completion_tokens = estimate_tokens(generated)
+        total_tokens = prompt_tokens + completion_tokens
+
+        cost = calculate_cost(
+            model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens
+        )
+
+        # Record usage in database
+        try:
             database_service.record_usage(
                 user_id=current_user,
                 model=model,
-                tokens_used=int(estimated_tokens),
-                cost=0.0,  # TODO: compute based on provider pricing
+                tokens_used=total_tokens,
+                cost=cost,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            # Log but don't fail the request if usage recording fails
+            print(f"Failed to record usage for {current_user}: {e}")
+
         return AIResponse(
             id=str(uuid4()),
             response=generated,
             model=model,
-            usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            usage={
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens
+            },
             created_at=datetime.now().isoformat(),
         )
+
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
+        # Catch any unexpected errors
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=f"Unexpected error: {str(e)}"
         )
 
 @router.get("/ai/history")
