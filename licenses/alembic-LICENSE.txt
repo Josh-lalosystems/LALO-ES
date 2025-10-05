@@ -1,3 +1,10 @@
+NOTICE: Collected and distributed by LALO AI SYSTEMS, LLC (2025).
+This file contains the original license text for the upstream project.
+The original copyright and license are preserved below and must not be altered.
+
+Included in distribution by: LALO AI SYSTEMS, LLC
+Inclusion year: 2025
+
 Source: https://raw.githubusercontent.com/sqlalchemy/alembic/main/LICENSE
 
 Copyright 2009-2025 Michael Bayer.
