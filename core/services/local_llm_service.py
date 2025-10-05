@@ -372,51 +372,49 @@ class FakeLocalInferenceServer:
 
         # Generate response based on model and prompt content
         if model_name == "liquid-tool":
-            # Router model - return routing decision
-            if "complexity" in prompt.lower() or "route" in prompt.lower():
-                # Parse complexity from prompt keywords
-                complexity = 0.3
-                if any(word in prompt.lower() for word in ["design", "analyze", "optimize", "architecture"]):
-                    complexity = 0.8
-                elif any(word in prompt.lower() for word in ["explain", "research", "create"]):
-                    complexity = 0.5
-                
-                return json.dumps({
-                    "path": "complex" if complexity > 0.6 else "simple",
-                    "complexity": complexity,
-                    "confidence": 0.85,
-                    "reasoning": "Automated routing decision from fake LLM",
-                    "recommended_model": "tinyllama",
-                    "requires_tools": complexity > 0.6,
-                    "requires_workflow": complexity > 0.7
-                })
+            # Router model - always return routing decision
+            # Parse complexity from prompt keywords
+            complexity = 0.3
+            if any(word in prompt.lower() for word in ["design", "analyze", "optimize", "architecture"]):
+                complexity = 0.8
+            elif any(word in prompt.lower() for word in ["explain", "research", "create"]):
+                complexity = 0.5
+            
+            return json.dumps({
+                "path": "complex" if complexity > 0.6 else "simple",
+                "complexity": complexity,
+                "confidence": 0.85,
+                "reasoning": "Automated routing decision from fake LLM",
+                "recommended_model": "tinyllama",
+                "requires_tools": complexity > 0.6,
+                "requires_workflow": complexity > 0.7
+            })
         
         elif model_name == "qwen-0.5b":
-            # Confidence model - return confidence scores
-            if "score" in prompt.lower() or "confidence" in prompt.lower():
-                # Check output quality based on length and keywords
-                output_quality = 0.7
-                if "output" in prompt.lower():
-                    # Parse for quality indicators
-                    if len(prompt) > 500:
-                        output_quality = 0.8
-                    if "comprehensive" in prompt.lower() or "detailed" in prompt.lower():
-                        output_quality = 0.85
-                    if "hmm" in prompt.lower() or "i don't know" in prompt.lower():
-                        output_quality = 0.3
-                
-                return json.dumps({
-                    "confidence": output_quality,
-                    "scores": {
-                        "factual": output_quality,
-                        "consistent": output_quality + 0.05,
-                        "complete": output_quality - 0.05,
-                        "grounded": output_quality
-                    },
-                    "issues": [] if output_quality > 0.6 else ["Low quality output detected"],
-                    "recommendation": "accept" if output_quality >= 0.8 else "retry" if output_quality >= 0.6 else "escalate",
-                    "reasoning": "Automated confidence scoring from fake LLM"
-                })
+            # Confidence model - always return confidence scores
+            # Check output quality based on length and keywords
+            output_quality = 0.7
+            if "output" in prompt.lower():
+                # Parse for quality indicators
+                if len(prompt) > 500:
+                    output_quality = 0.8
+                if "comprehensive" in prompt.lower() or "detailed" in prompt.lower():
+                    output_quality = 0.85
+                if "hmm" in prompt.lower() or "i don't know" in prompt.lower():
+                    output_quality = 0.3
+            
+            return json.dumps({
+                "confidence": output_quality,
+                "scores": {
+                    "factual": output_quality,
+                    "consistent": output_quality + 0.05,
+                    "complete": output_quality - 0.05,
+                    "grounded": output_quality
+                },
+                "issues": [] if output_quality > 0.6 else ["Low quality output detected"],
+                "recommendation": "accept" if output_quality >= 0.8 else "retry" if output_quality >= 0.6 else "escalate",
+                "reasoning": "Automated confidence scoring from fake LLM"
+            })
         
         # Default response for general chat (tinyllama or unspecified)
         # Provide a reasonable answer based on the prompt
