@@ -92,7 +92,7 @@ jobs:
         run: |
           set -e
           mkdir -p models/tinyllama
-          MODEL_PATH="models/tinyllama/model.gguf"
+          MODEL_PATH="models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
           MODEL_SOURCE="none"
 
           # Try to download from direct URL
@@ -185,8 +185,15 @@ jobs:
         if: steps.check_sources.outputs.has_source == 'true' && steps.get_model.outcome == 'failure'
         id: verify_artifact
         run: |
-          if [ -f "models/tinyllama/model.gguf" ]; then
-            FILE_SIZE=$(stat -f%z "models/tinyllama/model.gguf" 2>/dev/null || stat -c%s "models/tinyllama/model.gguf" 2>/dev/null || echo 0)
+          # Check for both possible filenames in artifact
+          MODEL_FILE="models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+          if [ ! -f "$MODEL_FILE" ] && [ -f "models/tinyllama/model.gguf" ]; then
+            # Rename if artifact has different name
+            mv "models/tinyllama/model.gguf" "$MODEL_FILE"
+          fi
+
+          if [ -f "$MODEL_FILE" ]; then
+            FILE_SIZE=$(stat -f%z "$MODEL_FILE" 2>/dev/null || stat -c%s "$MODEL_FILE" 2>/dev/null || echo 0)
             if [ "$FILE_SIZE" -gt 100000000 ]; then
               echo "✓ Model downloaded from GitHub artifact"
               echo "model_source=artifact" >> $GITHUB_OUTPUT
@@ -197,20 +204,13 @@ jobs:
           echo "✗ No valid model found from any source"
           exit 1
 
-      - name: Configure test environment
-        if: steps.check_sources.outputs.has_source == 'true'
-        run: |
-          # Update model config to point to our downloaded model
-          echo 'import sys' > test_model_config.py
-          echo 'import os' >> test_model_config.py
-          echo "sys.path.insert(0, os.path.abspath('.'))" >> test_model_config.py
-          echo 'from core.services.local_llm_service import local_llm_service' >> test_model_config.py
-          echo 'local_llm_service.model_configs["tinyllama"]["path"] = "tinyllama/model.gguf"' >> test_model_config.py
-
       - name: Run native LLM tests
-        if: steps.check_sources.outputs.has_source == 'true'
+        if: |
+          steps.check_sources.outputs.has_source == 'true' &&
+          (steps.get_model.outputs.model_source != '' || steps.verify_artifact.outputs.model_source != '')
         run: |
-          echo "Running native LLM tests with model from: ${{ steps.get_model.outputs.model_source || steps.verify_artifact.outputs.model_source }}"
+          MODEL_SRC="${{ steps.get_model.outputs.model_source || steps.verify_artifact.outputs.model_source }}"
+          echo "Running native LLM tests with model from: $MODEL_SRC"
 
           # Run the local inference test script
           python scripts/test_local_inference.py --model tinyllama --quick
