@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from typing import Dict, List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 from uuid import uuid4
 import asyncio
 import logging
+import json
 
 from ..services.key_management import key_manager, APIKeyRequest
 import os
@@ -650,6 +652,92 @@ async def generate_image(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image generation failed: {e}")
 
+@router.post("/ai/chat/stream")
+async def send_ai_request_stream(
+    request: AIRequest,
+    current_user: str = Depends(get_current_user)
+):
+    """
+    Stream AI responses in real-time (Server-Sent Events).
+
+    This endpoint supports local models with streaming generation.
+    Responses are sent as Server-Sent Events (SSE) in the format:
+
+    data: {"type": "token", "content": "word"}
+    data: {"type": "routing", "content": {...routing_info...}}
+    data: {"type": "done", "content": {"usage": {...}, "model": "..."}}
+    """
+    from ..services.local_llm_service import local_llm_service
+
+    # Determine which model to use
+    available = ai_service.get_available_models(current_user)
+    model = request.model or (available[0] if available else None)
+
+    if not model or model not in available:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Model {model} not available. Available models: {', '.join(available)}"
+        )
+
+    # Check if model is local and supports streaming
+    local_models = ["tinyllama-1.1b", "liquid-tool-1.2b", "qwen-0.5b"]
+    is_local = model in local_models
+
+    if not is_local:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Streaming only supported for local models: {', '.join(local_models)}"
+        )
+
+    async def generate_stream():
+        """Generator for streaming response"""
+        try:
+            # Send routing decision first
+            routing_decision = await router_model.route(request.prompt)
+            yield f"data: {json.dumps({'type': 'routing', 'content': routing_decision})}\n\n"
+
+            # Stream the response
+            full_response = ""
+            model_name = model.replace("-1.1b", "").replace("-1.2b", "").replace("-0.5b", "")
+
+            async for chunk in local_llm_service.generate_stream(
+                prompt=request.prompt,
+                model_name=model_name,
+                max_tokens=request.max_tokens or 1000,
+                temperature=request.temperature or 0.7
+            ):
+                full_response += chunk
+                yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
+
+            # Calculate usage and send completion
+            estimated_tokens = estimate_tokens(request.prompt, full_response)
+            cost = calculate_cost(model, estimated_tokens)
+
+            # Record usage
+            database_service.record_usage(
+                user_id=current_user,
+                model=model,
+                tokens_used=estimated_tokens,
+                cost=cost
+            )
+
+            # Send completion event
+            yield f"data: {json.dumps({'type': 'done', 'content': {'usage': {'total_tokens': estimated_tokens}, 'model': model, 'cost': cost}})}\n\n"
+
+        except Exception as e:
+            logger.error(f"Streaming error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
+    )
+
 @router.post("/request")
 async def create_request(
     prompt: str,
@@ -662,7 +750,7 @@ async def create_request(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Model {model} not available"
         )
-    
+
     try:
         response = await ai_service.generate(
             prompt,

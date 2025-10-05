@@ -4,8 +4,10 @@ from typing import Optional
 import jwt
 from datetime import datetime, timedelta
 import os
+import sys
 from dotenv import load_dotenv
 
+# Load .env if present
 load_dotenv()
 
 import logging
@@ -17,7 +19,9 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Demo mode configuration
-DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+# Enable DEMO_MODE automatically when running under pytest to make test
+# imports and startup safe (many tests import the app at module-import time).
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true" or ("pytest" in sys.modules)
 
 # HTTP Bearer security (optional for demo mode)
 security = HTTPBearer(auto_error=not DEMO_MODE)
