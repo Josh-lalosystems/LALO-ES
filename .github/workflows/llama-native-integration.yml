@@ -1,0 +1,85 @@
+name: Native LLM Heavy Integration Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  native-llm-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60  # Heavy tests may take longer
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install system build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            build-essential \
+            libomp-dev \
+            pkg-config
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-ml-${{ hashFiles('requirements.txt', 'requirements-ml.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-ml-
+            ${{ runner.os }}-pip-
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          if [ -f requirements-ml.txt ]; then
+            pip install -r requirements-ml.txt
+          fi
+
+      - name: Download model (if CI_MODEL_URL is set)
+        if: ${{ secrets.CI_MODEL_URL != '' }}
+        run: |
+          echo "Downloading model from CI_MODEL_URL secret..."
+          mkdir -p models/ci-model
+          curl -L -o models/ci-model/model.gguf "${{ secrets.CI_MODEL_URL }}"
+          echo "Model downloaded successfully"
+          ls -lh models/ci-model/
+        env:
+          CI_MODEL_URL: ${{ secrets.CI_MODEL_URL }}
+
+      - name: Run tests with real LLM
+        run: |
+          echo "Running pytest with RUN_REAL_LLAMA=1"
+          python -m pytest -q --junitxml=reports/junit-llm.xml --cov=.
+        env:
+          RUN_REAL_LLAMA: '1'
+          DEMO_MODE: 'false'
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-llm-reports
+          path: |
+            reports/junit-llm.xml
+            htmlcov/
+
+      - name: Report test summary
+        if: always()
+        run: |
+          echo "### Native LLM Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+          if [ -f reports/junit-llm.xml ]; then
+            echo "Tests completed. See artifacts for detailed results." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Tests may have failed to complete." >> $GITHUB_STEP_SUMMARY
+          fi
