@@ -1,0 +1,167 @@
+PROPRIETARY SOFTWARE LICENSE AGREEMENT
+
+Copyright (c) 2025 LALO AI SYSTEMS, LLC. All rights reserved.
+
+================================================================================
+IMPORTANT - READ CAREFULLY
+================================================================================
+
+This Proprietary Software License Agreement ("Agreement") is a legal agreement
+between you (either an individual or a single entity) and LALO AI SYSTEMS, LLC
+("Licensor") for the LALO AI Platform software product, which includes computer
+software and may include associated media, printed materials, and online or
+electronic documentation ("Software").
+
+BY INSTALLING, COPYING, OR OTHERWISE USING THE SOFTWARE, YOU AGREE TO BE BOUND
+BY THE TERMS OF THIS AGREEMENT. IF YOU DO NOT AGREE TO THE TERMS OF THIS
+AGREEMENT, DO NOT INSTALL OR USE THE SOFTWARE.
+
+================================================================================
+1. GRANT OF LICENSE
+================================================================================
+
+Subject to the terms and conditions of this Agreement, Licensor grants you a
+limited, non-exclusive, non-transferable, revocable license to use the Software
+solely for your internal business purposes or personal use.
+
+================================================================================
+2. RESTRICTIONS
+================================================================================
+
+You may NOT:
+
+a) Modify, adapt, translate, reverse engineer, decompile, disassemble, or
+   create derivative works based on the Software;
+
+b) Rent, lease, loan, sublicense, distribute, or otherwise transfer the
+   Software to any third party;
+
+c) Remove, alter, or obscure any proprietary notices (including copyright
+   and trademark notices) on the Software;
+
+d) Use the Software to develop competing products or services;
+
+e) Publicly disclose any performance benchmarks or analysis of the Software
+   without prior written consent from Licensor;
+
+f) Copy the Software except for a single backup or archival copy;
+
+g) Use the Software for any unlawful purpose or in violation of any
+   applicable laws or regulations.
+
+================================================================================
+3. PROPRIETARY RIGHTS
+================================================================================
+
+The Software is licensed, not sold. Licensor retains all right, title, and
+interest in and to the Software, including all intellectual property rights
+therein. The Software is protected by copyright laws and international
+copyright treaties, as well as other intellectual property laws and treaties.
+
+================================================================================
+4. CONFIDENTIALITY
+================================================================================
+
+The Software contains trade secrets and proprietary know-how that belongs to
+Licensor and is being made available to you in strict confidence. You agree
+to maintain the confidentiality of the Software using at least the same degree
+of care that you use to protect your own confidential information, but no less
+than reasonable care.
+
+================================================================================
+5. TERMINATION
+================================================================================
+
+This license is effective until terminated. Your rights under this license will
+terminate automatically without notice from Licensor if you fail to comply with
+any term(s) of this Agreement. Upon termination of the license, you shall cease
+all use of the Software and destroy all copies, full or partial, of the Software.
+
+================================================================================
+6. WARRANTY DISCLAIMER
+================================================================================
+
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS
+OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. LICENSOR
+DOES NOT WARRANT THAT THE SOFTWARE WILL MEET YOUR REQUIREMENTS OR THAT THE
+OPERATION OF THE SOFTWARE WILL BE UNINTERRUPTED OR ERROR-FREE.
+
+================================================================================
+7. LIMITATION OF LIABILITY
+================================================================================
+
+IN NO EVENT SHALL LICENSOR BE LIABLE FOR ANY SPECIAL, INCIDENTAL, INDIRECT,
+OR CONSEQUENTIAL DAMAGES WHATSOEVER (INCLUDING, WITHOUT LIMITATION, DAMAGES
+FOR LOSS OF BUSINESS PROFITS, BUSINESS INTERRUPTION, LOSS OF BUSINESS
+INFORMATION, OR ANY OTHER PECUNIARY LOSS) ARISING OUT OF THE USE OF OR
+INABILITY TO USE THE SOFTWARE, EVEN IF LICENSOR HAS BEEN ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES.
+
+================================================================================
+8. THIRD-PARTY COMPONENTS
+================================================================================
+
+The Software may incorporate certain third-party open source software components.
+Such components are subject to their respective license terms, which are provided
+separately. Nothing in this Agreement limits your rights under, or grants you
+rights that supersede, the terms and conditions of any applicable third-party
+license.
+
+Third-party AI models downloaded by this software are subject to their respective
+licenses:
+- Apache 2.0 License (various models)
+- MIT License (various models)
+- Liquid AI License (Liquid AI models)
+- Other licenses as specified
+
+================================================================================
+9. EXPORT RESTRICTIONS
+================================================================================
+
+You acknowledge that the Software may be subject to export restrictions of
+various countries. You agree to comply fully with all laws and regulations of
+the United States and other countries ("Export Laws") to assure that neither
+the Software nor any technical data related thereto nor any direct product
+thereof is exported or re-exported directly or indirectly in violation of, or
+used for any purposes prohibited by, such Export Laws.
+
+================================================================================
+10. GOVERNING LAW
+================================================================================
+
+This Agreement shall be governed by and construed in accordance with the laws
+of the State of Delaware, United States of America, without regard to its
+conflict of law provisions. Any legal action or proceeding arising under this
+Agreement will be brought exclusively in the courts located in Delaware, and
+the parties hereby consent to personal jurisdiction and venue therein.
+
+================================================================================
+11. ENTIRE AGREEMENT
+================================================================================
+
+This Agreement constitutes the entire agreement between you and Licensor
+relating to the Software and supersedes all prior or contemporaneous oral or
+written communications, proposals, and representations with respect to the
+Software or any other subject matter covered by this Agreement.
+
+================================================================================
+12. CONTACT INFORMATION
+================================================================================
+
+For licensing inquiries, please contact:
+
+LALO AI SYSTEMS, LLC
+Email: licensing@lalo-ai.com
+Website: https://lalo-ai.com
+
+================================================================================
+
+LALO AI, LALO AI SYSTEMS, and all related logos and product names are
+trademarks or registered trademarks of LALO AI SYSTEMS, LLC.
+
+All other trademarks are the property of their respective owners.
+
+================================================================================
+END OF LICENSE AGREEMENT
+================================================================================
