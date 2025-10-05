@@ -1,0 +1,235 @@
+name: Native LLM Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  native-llm-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Check for model sources
+        id: check_sources
+        run: |
+          HAS_SOURCE=false
+
+          # Check for direct URL
+          if [ -n "${{ secrets.CI_MODEL_URL }}" ]; then
+            echo "Found CI_MODEL_URL"
+            HAS_SOURCE=true
+          fi
+
+          # Check for S3 bucket and key
+          if [ -n "${{ secrets.CI_MODEL_S3_BUCKET }}" ] && [ -n "${{ secrets.CI_MODEL_S3_KEY }}" ]; then
+            echo "Found S3 configuration"
+            HAS_SOURCE=true
+          fi
+
+          # Check for GCS bucket and object
+          if [ -n "${{ secrets.CI_MODEL_GCS_BUCKET }}" ] && [ -n "${{ secrets.CI_MODEL_GCS_OBJECT }}" ]; then
+            echo "Found GCS configuration"
+            HAS_SOURCE=true
+          fi
+
+          echo "has_source=$HAS_SOURCE" >> $GITHUB_OUTPUT
+
+          if [ "$HAS_SOURCE" = "false" ]; then
+            echo "⊘ No model sources configured. Native LLM tests will be skipped."
+            echo "Configure one of:"
+            echo "  - CI_MODEL_URL secret (direct download URL)"
+            echo "  - CI_MODEL_S3_BUCKET + CI_MODEL_S3_KEY secrets"
+            echo "  - CI_MODEL_GCS_BUCKET + CI_MODEL_GCS_OBJECT secrets"
+            echo "  - Or upload a 'model-gguf-artifact' in a previous job"
+          else
+            echo "✓ Model source(s) found. Will attempt to download model."
+          fi
+
+      - name: Install dependencies
+        if: steps.check_sources.outputs.has_source == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+          # Install llama-cpp-python for native inference
+          pip install llama-cpp-python
+
+          # Install AWS CLI if S3 source might be used
+          if [ -n "${{ secrets.CI_MODEL_S3_BUCKET }}" ]; then
+            pip install awscli
+          fi
+
+          # Install Google Cloud SDK if GCS source might be used
+          if [ -n "${{ secrets.CI_MODEL_GCS_BUCKET }}" ]; then
+            echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+            curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+            sudo apt-get update && sudo apt-get install -y google-cloud-sdk
+          fi
+
+      - name: Get model from source
+        if: steps.check_sources.outputs.has_source == 'true'
+        id: get_model
+        env:
+          CI_MODEL_URL: ${{ secrets.CI_MODEL_URL }}
+          CI_MODEL_S3_BUCKET: ${{ secrets.CI_MODEL_S3_BUCKET }}
+          CI_MODEL_S3_KEY: ${{ secrets.CI_MODEL_S3_KEY }}
+          CI_MODEL_GCS_BUCKET: ${{ secrets.CI_MODEL_GCS_BUCKET }}
+          CI_MODEL_GCS_OBJECT: ${{ secrets.CI_MODEL_GCS_OBJECT }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+        run: |
+          set -e
+          mkdir -p models/tinyllama
+          MODEL_PATH="models/tinyllama/model.gguf"
+          MODEL_SOURCE="none"
+
+          # Try to download from direct URL
+          if [ -n "$CI_MODEL_URL" ]; then
+            echo "📥 Attempting to download model from direct URL..."
+            if curl -L -o "$MODEL_PATH" "$CI_MODEL_URL" 2>&1; then
+              if [ -f "$MODEL_PATH" ] && [ -s "$MODEL_PATH" ]; then
+                echo "✓ Successfully downloaded model from URL"
+                MODEL_SOURCE="url"
+              else
+                echo "✗ Downloaded file is empty or missing"
+                rm -f "$MODEL_PATH"
+              fi
+            else
+              echo "✗ Failed to download from URL"
+            fi
+          fi
+
+          # Try S3 if URL failed
+          if [ "$MODEL_SOURCE" = "none" ] && [ -n "$CI_MODEL_S3_BUCKET" ] && [ -n "$CI_MODEL_S3_KEY" ]; then
+            echo "📥 Attempting to download model from S3..."
+            if aws s3 cp "s3://${CI_MODEL_S3_BUCKET}/${CI_MODEL_S3_KEY}" "$MODEL_PATH" 2>&1; then
+              if [ -f "$MODEL_PATH" ] && [ -s "$MODEL_PATH" ]; then
+                echo "✓ Successfully downloaded model from S3"
+                MODEL_SOURCE="s3"
+              else
+                echo "✗ Downloaded file is empty or missing"
+                rm -f "$MODEL_PATH"
+              fi
+            else
+              echo "✗ Failed to download from S3"
+            fi
+          fi
+
+          # Try GCS if both URL and S3 failed
+          if [ "$MODEL_SOURCE" = "none" ] && [ -n "$CI_MODEL_GCS_BUCKET" ] && [ -n "$CI_MODEL_GCS_OBJECT" ]; then
+            echo "📥 Attempting to download model from GCS..."
+
+            # Set up credentials if provided
+            if [ -n "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+              echo "$GOOGLE_APPLICATION_CREDENTIALS" > /tmp/gcs-key.json
+              gcloud auth activate-service-account --key-file=/tmp/gcs-key.json
+            fi
+
+            # Download from GCS using gsutil
+            gsutil cp "gs://${CI_MODEL_GCS_BUCKET}/${CI_MODEL_GCS_OBJECT}" "$MODEL_PATH" 2>&1 || true
+            if [ $? -eq 0 ] && [ -f "$MODEL_PATH" ] && [ -s "$MODEL_PATH" ]; then
+              MODEL_SOURCE="gcs"
+            fi
+
+            # Clean up credentials
+            rm -f /tmp/gcs-key.json
+          fi
+
+          # Try GitHub artifact as last resort
+          if [ "$MODEL_SOURCE" = "none" ]; then
+            echo "📥 Attempting to find model from GitHub artifacts..."
+            # Note: This requires the artifact to be uploaded in a previous job/workflow
+            # The download-artifact action would be used in a separate step
+            echo "⊘ GitHub artifact download requires actions/download-artifact in previous step"
+          fi
+
+          # Verify we got a model
+          if [ "$MODEL_SOURCE" = "none" ]; then
+            echo "✗ Failed to download model from any source"
+            exit 1
+          fi
+
+          # Verify file size (GGUF models should be at least 100MB)
+          FILE_SIZE=$(stat -f%z "$MODEL_PATH" 2>/dev/null || stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0)
+          if [ "$FILE_SIZE" -lt 100000000 ]; then
+            echo "✗ Downloaded file is too small (${FILE_SIZE} bytes). Expected at least 100MB."
+            exit 1
+          fi
+
+          echo "✓ Model downloaded successfully from: $MODEL_SOURCE"
+          echo "✓ Model size: $FILE_SIZE bytes"
+          echo "model_source=$MODEL_SOURCE" >> $GITHUB_OUTPUT
+          echo "MODEL_SOURCE=$MODEL_SOURCE" >> $GITHUB_ENV
+
+      - name: Try downloading from GitHub artifact
+        if: steps.check_sources.outputs.has_source == 'true' && steps.get_model.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: model-gguf-artifact
+          path: models/tinyllama/
+
+      - name: Verify artifact download
+        if: steps.check_sources.outputs.has_source == 'true' && steps.get_model.outcome == 'failure'
+        id: verify_artifact
+        run: |
+          if [ -f "models/tinyllama/model.gguf" ]; then
+            FILE_SIZE=$(stat -f%z "models/tinyllama/model.gguf" 2>/dev/null || stat -c%s "models/tinyllama/model.gguf" 2>/dev/null || echo 0)
+            if [ "$FILE_SIZE" -gt 100000000 ]; then
+              echo "✓ Model downloaded from GitHub artifact"
+              echo "model_source=artifact" >> $GITHUB_OUTPUT
+              echo "MODEL_SOURCE=artifact" >> $GITHUB_ENV
+              exit 0
+            fi
+          fi
+          echo "✗ No valid model found from any source"
+          exit 1
+
+      - name: Configure test environment
+        if: steps.check_sources.outputs.has_source == 'true'
+        run: |
+          # Update model config to point to our downloaded model
+          echo 'import sys' > test_model_config.py
+          echo 'import os' >> test_model_config.py
+          echo "sys.path.insert(0, os.path.abspath('.'))" >> test_model_config.py
+          echo 'from core.services.local_llm_service import local_llm_service' >> test_model_config.py
+          echo 'local_llm_service.model_configs["tinyllama"]["path"] = "tinyllama/model.gguf"' >> test_model_config.py
+
+      - name: Run native LLM tests
+        if: steps.check_sources.outputs.has_source == 'true'
+        run: |
+          echo "Running native LLM tests with model from: ${{ steps.get_model.outputs.model_source || steps.verify_artifact.outputs.model_source }}"
+
+          # Run the local inference test script
+          python scripts/test_local_inference.py --model tinyllama --quick
+        env:
+          DEMO_MODE: 'false'
+
+      - name: Report test results
+        if: steps.check_sources.outputs.has_source == 'true' && always()
+        run: |
+          if [ "${{ steps.get_model.outputs.model_source }}" != "" ]; then
+            echo "✓ Native LLM tests completed using model from: ${{ steps.get_model.outputs.model_source }}"
+          elif [ "${{ steps.verify_artifact.outputs.model_source }}" != "" ]; then
+            echo "✓ Native LLM tests completed using model from: ${{ steps.verify_artifact.outputs.model_source }}"
+          else
+            echo "⊘ Tests were skipped or failed"
+          fi
+
+      - name: Skip message
+        if: steps.check_sources.outputs.has_source != 'true'
+        run: |
+          echo "⊘ Native LLM tests skipped - no model sources configured"
+          echo "This is expected and not a failure."
