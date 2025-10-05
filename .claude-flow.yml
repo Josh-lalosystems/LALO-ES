@@ -49,7 +49,6 @@ protections:
   # Paths that must never be modified by agents unless explicitly approved in a dedicated PR.
   read_only:
     - "LICENSE*"
-    - "MIT License.txt"
     - "README.md"
     - "docs/**"
     - "Screenshot*.*"
