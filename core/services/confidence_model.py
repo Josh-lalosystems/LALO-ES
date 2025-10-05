@@ -108,17 +108,37 @@ class ConfidenceModel:
             scores = json.loads(result.strip())
 
             # Validate and normalize scores
-            scores = self._validate_scores(scores)
+            validated = self._validate_scores(scores)
+
+            # Normalize into the canonical response shape (always include nested 'scores')
+            result = {
+                "confidence": validated["confidence"],
+                "scores": {
+                    "factual": validated["factual"],
+                    "consistent": validated["consistent"],
+                    "complete": validated["complete"],
+                    "grounded": validated["grounded"]
+                },
+                "issues": validated.get("issues", []),
+                "reasoning": validated.get("reasoning", "Automated scoring")
+            }
 
             # Add recommendation based on confidence
-            scores["recommendation"] = self._get_recommendation(scores["confidence"])
+            # Detect evasive/generic phrases in the OUTPUT text and penalize confidence
+            evasive_phrases = ["i don't know", "i'm not sure", "as an ai", "cannot answer", "i cannot", "i don't have"]
+            out_lower = (output or "").lower()
+            if any(p in out_lower for p in evasive_phrases):
+                # Reduce confidence significantly for evasive responses
+                result["confidence"] = max(0.0, result["confidence"] * 0.3)
+
+            result["recommendation"] = self._get_recommendation(result["confidence"])
 
             logger.info(
-                f"Confidence score: {scores['confidence']:.2f} "
-                f"(recommendation: {scores['recommendation']})"
+                f"Confidence score: {result['confidence']:.2f} "
+                f"(recommendation: {result['recommendation']})"
             )
 
-            return scores
+            return result
 
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse confidence scores: {e}")
@@ -200,6 +220,14 @@ Model Used: {model_used or "Unknown"}
         for key in ["factual", "consistent", "complete", "grounded"]:
             scores[key] = max(0.0, min(1.0, float(scores[key])))
 
+        # Penalize clearly evasive or generic responses
+        lowered = scores.get("reasoning", "").lower() + " " + " ".join([str(scores.get(k, "")).lower() for k in ["issues"]])
+        evasive_phrases = ["i don't know", "i'm not sure", "as an ai", "cannot answer"]
+        for phrase in evasive_phrases:
+            if phrase in lowered or phrase in str(scores.get("issues", [])).lower():
+                # Reduce confidence significantly
+                scores["confidence"] = max(0.0, scores.get("confidence", 0.0) * 0.5)
+
         # Calculate overall confidence (weighted average)
         scores["confidence"] = (
             scores["factual"] * 0.4 +      # Most important
@@ -268,6 +296,12 @@ Model Used: {model_used or "Unknown"}
             grounded * 0.1
         )
 
+        # Penalize evasive/generic responses in heuristics too
+        low_out = output.lower() if output else ""
+        evasive_phrases = ["i don't know", "i'm not sure", "as an ai", "cannot answer", "i cannot"]
+        if any(p in low_out for p in evasive_phrases):
+            confidence = max(0.0, confidence * 0.3)
+
         return {
             "confidence": confidence,
             "scores": {
@@ -316,8 +350,8 @@ Model Used: {model_used or "Unknown"}
                 "scores": score["scores"]
             })
 
-        # Sort by confidence (highest first)
-        scores.sort(key=lambda x: x["confidence"], reverse=True)
+        # Sort by confidence (highest first), tiebreaker by text length (prefer more complete answers)
+        scores.sort(key=lambda x: (x["confidence"], len(x["text"])), reverse=True)
 
         best = scores[0]
 

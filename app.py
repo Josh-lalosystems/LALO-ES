@@ -86,6 +86,32 @@ async def lifespan(app: FastAPI):
         warnings.append("DEMO_MODE is enabled - authentication is bypassed!")
         warnings.append("   Set DEMO_MODE=false in .env for production")
         app_logger.warning("Running in DEMO MODE - authentication bypassed")
+
+        # DEMO_MODE: Seed demo API key for smoother first-run UX
+        try:
+            from core.database import SessionLocal, APIKeys
+            db = SessionLocal()
+            try:
+                demo_user_id = "demo-user@example.com"
+                existing_keys = db.query(APIKeys).filter(APIKeys.user_id == demo_user_id).first()
+
+                if not existing_keys:
+                    app_logger.info("[DEMO] Seeding demo API keys for first-run UX")
+                    # Create placeholder API keys (empty but initialized)
+                    # Users can add real keys via Settings page
+                    demo_api_keys = APIKeys(user_id=demo_user_id)
+                    demo_api_keys.keys = {}  # Empty keys dict
+                    db.add(demo_api_keys)
+                    db.commit()
+                    app_logger.info("[DEMO] Demo API keys initialized (empty)")
+                    app_logger.info("[DEMO] Add real API keys via Settings page")
+                else:
+                    app_logger.info("[DEMO] Demo API keys already exist")
+            finally:
+                db.close()
+        except Exception as e:
+            app_logger.warning(f"[DEMO] Failed to seed demo API keys: {e}")
+            app_logger.warning("[DEMO] You may need to run: python scripts/init_db.py")
     else:
         app_logger.info("DEMO_MODE is disabled")
 
@@ -178,9 +204,10 @@ app.include_router(audit_router, tags=["Audit"])
 app.include_router(connector_router, tags=["Connectors"])
 app.include_router(model_management_router, tags=["Model Management"])
 
-# Serve static files (React build)
-if os.path.exists("lalo-frontend/build"):
-    app.mount("/static", StaticFiles(directory="lalo-frontend/build/static"), name="static")
+# Serve static files (React build) only if the static directory exists
+static_dir = os.path.join("lalo-frontend", "build", "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 @app.get("/")
 async def root():

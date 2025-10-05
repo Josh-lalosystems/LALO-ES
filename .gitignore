@@ -17,6 +17,9 @@ vector_store.pkl
 *.pkl
 *.log
 
+# Temporary test files
+.tmp_*.py
+
 # Packaging
 *.egg-info/
 dist/

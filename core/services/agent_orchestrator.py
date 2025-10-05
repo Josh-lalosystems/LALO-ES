@@ -195,6 +195,9 @@ class AgentOrchestrator:
         """
         # Get recommended model from routing decision
         planner_model = routing_decision.get("recommended_model", "liquid-tool")
+        # Normalize planner_model base name (allow 'tinyllama-1.1b' -> 'tinyllama')
+        if "-" in planner_model:
+            planner_model = planner_model.split("-")[0]
 
         # If recommended model not available, use first available
         if planner_model not in available_models and available_models:
@@ -257,7 +260,7 @@ Routing Info: Complexity={routing_decision.get('complexity', 0.5):.2f}, Path={ro
 
     def _create_default_plan(self, user_request: str, available_models: List[str]) -> Dict:
         """Create simple fallback plan"""
-        model = available_models[0] if available_models else "tinyllama-1.1b"
+        model = available_models[0] if available_models else "tinyllama"
 
         return {
             "steps": [
@@ -265,7 +268,7 @@ Routing Info: Complexity={routing_decision.get('complexity', 0.5):.2f}, Path={ro
                     "id": 1,
                     "action": "generate",
                     "model": model,
-                    "description": f"Answer: {user_request}",
+                    "description": f"Provide a clear answer to: {user_request}",
                     "dependencies": [],
                     "parallel": False
                 }

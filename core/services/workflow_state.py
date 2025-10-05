@@ -88,9 +88,13 @@ class Workflow:
         self.completed_at: Optional[datetime] = None
 
         for step_config in steps:
+            # Planner may emit steps with keys like 'action' or 'step' instead of 'type'.
+            # Accept these as aliases to maintain compatibility.
+            step_type = step_config.get("type") or step_config.get("action") or step_config.get("step") or "unknown"
+
             step = WorkflowStep(
                 step_id=step_config.get("id", str(uuid4())),
-                step_type=step_config["type"],
+                step_type=step_type,
                 config=step_config
             )
             self.steps[step.id] = step

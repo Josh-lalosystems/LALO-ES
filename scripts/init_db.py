@@ -1,38 +1,27 @@
 #!/usr/bin/env python
 """
-Copyright (c) 2025 LALO AI SYSTEMS, LLC. All rights reserved.
+LALO AI - Database Initialization Script
 
-PROPRIETARY AND CONFIDENTIAL
+This script performs minimal DB initialization for developer/testing machines:
+- creates tables
+- creates a demo user
+- validates (and optionally generates) an encryption key for local testing
 
-This file is part of LALO AI Platform and is protected by copyright law.
-Unauthorized copying, modification, distribution, or use of this software,
-via any medium, is strictly prohibited without the express written permission
-of LALO AI SYSTEMS, LLC.
-"""
-
-"""
-Database Initialization Script
-
-This script initializes the LALO AI database with:
-1. All required tables
-2. Demo user for development/testing
-3. Validates encryption keys
-
-Usage:
-    python scripts/init_db.py
+It is designed to run on developer machines and CI; for production, run with
+appropriate environment variables and secure key management.
 """
 
 import os
 import sys
 from pathlib import Path
+import logging
 
-# Add parent directory to path so we can import our modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# ensure project root is on path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.database import Base, engine, SessionLocal, User
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
-import logging
 
 load_dotenv()
 
@@ -40,122 +29,90 @@ logger = logging.getLogger("lalo.scripts.init_db")
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO)
 
-def check_encryption_key():
-    """Check if encryption key is set, generate if missing"""
-    encryption_key = os.getenv("ENCRYPTION_KEY")
 
-    if not encryption_key:
-        logger.warning("ENCRYPTION_KEY not set in environment")
-        logger.info("Generating a new key for this session...")
-        logger.warning("WARNING: THIS KEY WILL NOT PERSIST - Add it to .env for production!")
-        new_key = Fernet.generate_key().decode()
-        logger.info("Add this to your .env file:")
-        logger.info("ENCRYPTION_KEY=%s", new_key)
-        os.environ["ENCRYPTION_KEY"] = new_key
-        return False
-    else:
+def check_encryption_key() -> bool:
+    """Return True if ENCRYPTION_KEY already present, otherwise generate one and
+    return False (caller should persist it for future runs if desired).
+    """
+    key = os.getenv("ENCRYPTION_KEY")
+    if key:
         logger.info("[OK] ENCRYPTION_KEY is set")
         return True
+    logger.warning("ENCRYPTION_KEY not set; generating a temporary key for this run")
+    new_key = Fernet.generate_key().decode()
+    logger.info("Temporary ENCRYPTION_KEY (persist to .env for reuse): %s", new_key)
+    os.environ["ENCRYPTION_KEY"] = new_key
+    return False
 
-def init_database():
-    """Initialize database schema"""
-    logger.info("Creating database tables...")
+
+def init_database() -> bool:
+    """Create DB tables."""
     try:
         Base.metadata.create_all(bind=engine)
-        logger.info("[OK] All tables created successfully")
+        logger.info("[OK] Database tables created or already exist")
         return True
-    except Exception as e:
-        logger.exception("[ERROR] Error creating tables: %s", e)
+    except Exception as exc:
+        logger.exception("[ERROR] Failed to create tables: %s", exc)
         return False
 
-def create_demo_user():
-    """Create demo user for development"""
-    logger.info("Creating demo user...")
+
+def create_demo_user() -> bool:
+    """Create demo user if missing."""
     db = SessionLocal()
-
     try:
-        # Check if demo user already exists
-        demo_user = db.query(User).filter(User.email == "demo-user@example.com").first()
-
-        if demo_user:
-            logger.info("[INFO] Demo user already exists (demo-user@example.com)")
+        user = db.query(User).filter(User.email == "demo-user@example.com").first()
+        if user:
+            logger.info("[INFO] Demo user already present")
             return True
-
-        # Create new demo user
-        demo_user = User(
-            id="demo-user-id",
-            email="demo-user@example.com"
-        )
-        db.add(demo_user)
-    db.commit()
-    logger.info("[OK] Demo user created: demo-user@example.com")
+        u = User(id="demo-user-id", email="demo-user@example.com")
+        db.add(u)
+        db.commit()
+        logger.info("[OK] Demo user created")
         return True
-
-    except Exception as e:
-    logger.exception("[ERROR] Error creating demo user: %s", e)
-        db.rollback()
+    except Exception:
+        logger.exception("[ERROR] Could not create demo user")
+        try:
+            db.rollback()
+        except Exception:
+            pass
         return False
     finally:
         db.close()
 
-def verify_database():
-    """Verify database is properly set up"""
-    logger.info("Verifying database setup...")
+
+def verify_database() -> bool:
     db = SessionLocal()
-
     try:
-        # Check tables exist by querying
-        user_count = db.query(User).count()
-        logger.info("[OK] Database verified: %d user(s) found", user_count)
+        cnt = db.query(User).count()
+        logger.info("[OK] DB verification: %d users", cnt)
         return True
-    except Exception as e:
-        logger.exception("[ERROR] Database verification failed: %s", e)
+    except Exception:
+        logger.exception("[ERROR] DB verification failed")
         return False
     finally:
         db.close()
 
-def main():
-    """Main initialization function"""
+
+def main() -> None:
     logger.info("%s", "=" * 60)
     logger.info("LALO AI - Database Initialization")
     logger.info("%s", "=" * 60)
-    logger.info("")
 
-    # Check encryption key
-    encryption_key_exists = check_encryption_key()
-    logger.info("")
-
-    # Initialize database
+    key_exists = check_encryption_key()
     if not init_database():
-        logger.error("Database initialization failed")
+        logger.error("Database init failed")
         sys.exit(1)
-    logger.info("")
-
-    # Create demo user
     if not create_demo_user():
         logger.error("Demo user creation failed")
         sys.exit(1)
-    logger.info("")
-
-    # Verify setup
     if not verify_database():
         logger.error("Database verification failed")
         sys.exit(1)
-    logger.info("")
 
-    logger.info("%s", "=" * 60)
-    logger.info("[SUCCESS] Database initialization complete!")
-    logger.info("%s", "=" * 60)
-    logger.info("")
-    logger.info("Next steps:")
-    logger.info("1. If ENCRYPTION_KEY was generated, add it to your .env file")
-    logger.info("2. Start the application: python app.py")
-    logger.info("3. Access http://localhost:8000 and login with demo token")
-    logger.info("")
+    logger.info("[SUCCESS] Init complete")
+    if not key_exists:
+        logger.warning("Remember to persist ENCRYPTION_KEY to .env for future runs")
 
-    if not encryption_key_exists:
-        logger.warning("IMPORTANT: Don't forget to save the ENCRYPTION_KEY to .env!")
-        logger.info("")
 
 if __name__ == "__main__":
     main()

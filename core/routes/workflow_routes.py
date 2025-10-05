@@ -125,7 +125,8 @@ async def start_workflow(
     try:
         # Ensure user has API keys and models initialized
         api_keys = key_manager.get_keys(current_user)
-        if not api_keys:
+        # In DEMO_MODE allow workflows to start without API keys
+        if not api_keys and not DEMO_MODE:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No API keys configured. Please add API keys in Settings before starting a workflow."

@@ -307,6 +307,11 @@ def main():
         action="store_true",
         help="List all available models and exit"
     )
+    parser.add_argument(
+        "--auto-confirm",
+        action="store_true",
+        help="Auto-confirm download prompts (for automated installations)"
+    )
 
     args = parser.parse_args()
 
@@ -384,12 +389,14 @@ def main():
     logger.info(f"Download location: {MODELS_DIR.absolute()}")
     logger.info("=" * 80)
 
-    # Confirm
-    if not args.force:
+    # Confirm (unless auto-confirm is enabled)
+    if not args.force and not args.auto_confirm:
         response = input("\nProceed with download? [y/N]: ")
         if response.lower() != 'y':
             logger.info("Download cancelled.")
             return
+    elif args.auto_confirm:
+        logger.info("\nAuto-confirm enabled, proceeding with download...")
 
     # Download models
     logger.info("\nStarting downloads...\n")

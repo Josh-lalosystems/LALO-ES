@@ -84,6 +84,11 @@ class UnifiedRequestHandler:
 
         logger.info(f"Handling request for user {user_id}: {user_request[:100]}...")
 
+        # Validate input
+        if not user_request or not user_request.strip():
+            logger.error("Empty user_request provided")
+            raise ValueError("Empty user_request")
+
         # STEP 1: Route the request
         routing_decision = await self.router.route(user_request, context)
 
@@ -207,3 +212,6 @@ class UnifiedRequestHandler:
 
 # Global instance
 unified_handler = UnifiedRequestHandler()
+
+# Backwards-compatible alias expected by tests and older imports
+unified_request_handler = unified_handler

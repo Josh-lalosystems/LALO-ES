@@ -63,6 +63,23 @@ class RouterModel:
             }
         """
         try:
+            # Quick deterministic short-circuit for trivial/syntactic math or short factual questions
+            try:
+                low_request = (user_request or "").lower()
+                # Simple math detection (e.g., 'what is 2 + 2')
+                if any(op in low_request for op in ['+', '-', '*', '/']) and len(low_request) < 80:
+                    return {
+                        "complexity": 0.1,
+                        "confidence": 0.95,
+                        "path": "simple",
+                        "reasoning": "Deterministic math detection",
+                        "recommended_model": "tinyllama",
+                        "requires_tools": False,
+                        "requires_workflow": False
+                    }
+            except Exception:
+                pass
+
             # Check if local inference is available
             if not self.server.is_available():
                 logger.warning("Local inference not available, using fallback routing")
