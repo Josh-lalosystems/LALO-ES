@@ -4,12 +4,15 @@ from pydantic import BaseModel
 from datetime import datetime
 from uuid import uuid4
 import asyncio
+import logging
 
 from ..services.key_management import key_manager, APIKeyRequest
+import os
 from ..services.ai_service import ai_service
 from ..services.auth import get_current_user
 from ..services.database_service import database_service
 from ..services.pricing import calculate_cost, estimate_tokens
+from ..services.router_model import router_model
 try:
     from confidence_system import ConfidenceSystem  # type: ignore
     CONF_SYSTEM_AVAILABLE = True
@@ -19,9 +22,20 @@ except Exception:
 
 router = APIRouter(prefix="/api")
 
+# Logger for AI routes
+logger = logging.getLogger("lalo.ai_routes")
+if not logger.handlers:
+    # Basic config if not already configured by application
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter("[%(levelname)s] %(name)s: %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
 class AIRequest(BaseModel):
     prompt: str
-    model: Optional[str] = "gpt-4"
+    # Default to None so the route will select the first available model
+    model: Optional[str] = None
     max_tokens: Optional[int] = 1000
     temperature: Optional[float] = 0.7
 
@@ -34,6 +48,7 @@ class AIResponse(BaseModel):
     # Optional explainability additions
     interpretation: Optional[str] = None
     confidence: Optional[Dict] = None  # { score: float, reasoning: List[str], clarifications: List[str], feedback_required: bool }
+    routing_info: Optional[Dict] = None  # Router decision metadata
 
 class ModelResponse(BaseModel):
     name: str
@@ -83,149 +98,184 @@ async def send_ai_request(
     - Usage tracking with cost calculation
     - Detailed error messages
     """
+    # New clean implementation: validate keys, demo fallback, initialize models, generate
+    logger.debug("send_ai_request called for user=%s model=%s", current_user, request.model)
+
+    # **STEP 1: ROUTE THE REQUEST** (Intelligent routing with local inference)
     try:
-        # Ensure user models are initialized based on stored keys
-        if current_user not in ai_service.models:
-            try:
-                api_keys = key_manager.get_keys(current_user)
-                if not api_keys:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="No API keys configured. Please add your API keys in Settings to use AI models."
-                    )
-                ai_service.initialize_user_models(current_user, api_keys)
-            except HTTPException:
-                raise
-            except Exception as e:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Failed to initialize AI models: {str(e)}"
-                )
+        routing_decision = await router_model.route(request.prompt)
+        logger.info(f"Router decision: path={routing_decision['path']}, complexity={routing_decision['complexity']:.2f}, recommended_model={routing_decision['recommended_model']}")
+    except Exception as e:
+        logger.warning(f"Router failed, using default routing: {e}")
+        routing_decision = {
+            "path": "simple",
+            "complexity": 0.5,
+            "confidence": 0.7,
+            "reasoning": f"Fallback routing (router error: {str(e)})",
+            "recommended_model": "tinyllama-1.1b",
+            "requires_tools": False,
+            "requires_workflow": False
+        }
 
-        # Get available models and select one
-        available = ai_service.get_available_models(current_user)
-        model = request.model or (available[0] if available else None)
+    # Load API keys and validate which providers are working
+    api_keys = key_manager.get_keys(current_user) or {}
+    logger.debug("api_keys for %s: %s", current_user, list(api_keys.keys()))
+    try:
+        working_keys = await key_manager.validate_keys(current_user)
+        if not isinstance(working_keys, dict):
+            logger.warning("validate_keys returned unexpected type; coercing to dict")
+            working_keys = dict(working_keys)
+    except Exception as ve:
+        logger.warning("validate_keys exception for %s: %s", current_user, ve)
+        working_keys = {}
+    logger.debug("working_keys: %s", working_keys)
 
-        if not available:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No models available. Please add API keys in Settings."
-            )
-
-        if not model or model not in available:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Model '{model}' not available. Available models: {', '.join(available)}"
-            )
-
-        # Generate response with timeout protection
-        try:
-            generated = await asyncio.wait_for(
-                ai_service.generate(
-                    request.prompt,
-                    model_name=model,
-                    user_id=current_user,
-                    max_tokens=request.max_tokens,
-                    temperature=request.temperature,
-                ),
-                timeout=60.0  # 60 second timeout
-            )
-        except asyncio.TimeoutError:
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail="AI request timed out after 60 seconds. Please try again with a shorter prompt or lower max_tokens."
-            )
-        except Exception as e:
-            error_msg = str(e)
-            # Provider-specific error handling
-            if "api key" in error_msg.lower():
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="API key authentication failed. Please check your API keys in Settings."
-                )
-            elif "rate limit" in error_msg.lower():
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Rate limit exceeded. Please wait a moment and try again."
-                )
-            elif "quota" in error_msg.lower():
-                raise HTTPException(
-                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                    detail="API quota exceeded. Please check your provider account."
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"AI generation failed: {error_msg}"
-                )
-
-    # Calculate token usage and cost
+    DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+    # If no keys at all and demo enabled, return a demo echo
+    if (not api_keys or all(not v for v in api_keys.values())) and DEMO_MODE:
+        mock_text = f"(DEMO) Echo: {request.prompt}"
         prompt_tokens = estimate_tokens(request.prompt)
-        completion_tokens = estimate_tokens(generated)
+        completion_tokens = estimate_tokens(mock_text)
         total_tokens = prompt_tokens + completion_tokens
-
-        cost = calculate_cost(
-            model,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens
-        )
-
-        # Optional: run confidence/interpretation analysis if models available
-        interpretation: Optional[str] = None
-        confidence_payload: Optional[Dict] = None
-        try:
-            if CONF_SYSTEM_AVAILABLE:
-                available_models = set(ai_service.get_available_models(current_user))
-                # Only run if both OpenAI lightweight and Anthropic confidence models exist
-                if ("gpt-3.5-turbo" in available_models) and ("claude-3-haiku-20240307" in available_models):
-                    cs = ConfidenceSystem(ai_service=ai_service, user_id=current_user)
-                    analysis = await cs.interpret_request(request.prompt)
-                    interpretation = analysis.interpreted_intent
-                    confidence_payload = {
-                        "score": analysis.confidence_score,
-                        "reasoning": analysis.reasoning_trace,
-                        "clarifications": analysis.suggested_clarifications,
-                        "feedback_required": analysis.feedback_required,
-                    }
-        except Exception as e:
-            # Don't fail the request if confidence system fails
-            print(f"ConfidenceSystem warning: {e}")
-
-        # Record usage in database
-        try:
-            database_service.record_usage(
-                user_id=current_user,
-                model=model,
-                tokens_used=total_tokens,
-                cost=cost,
-            )
-        except Exception as e:
-            # Log but don't fail the request if usage recording fails
-            print(f"Failed to record usage for {current_user}: {e}")
-
         return AIResponse(
             id=str(uuid4()),
-            response=generated,
-            model=model,
+            response=mock_text,
+            model="demo-model",
             usage={
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
-                "total_tokens": total_tokens
+                "total_tokens": total_tokens,
             },
             created_at=datetime.now().isoformat(),
-            interpretation=interpretation,
-            confidence=confidence_payload,
+            interpretation=None,
+            confidence=None,
         )
 
-    except HTTPException:
-        # Re-raise HTTP exceptions as-is
-        raise
-    except Exception as e:
-        # Catch any unexpected errors
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unexpected error: {str(e)}"
+    # If keys exist but none validated as working, and demo enabled, return demo echo
+    if api_keys and (not any(working_keys.values())) and DEMO_MODE:
+        mock_text = f"(DEMO) Echo: {request.prompt}"
+        prompt_tokens = estimate_tokens(request.prompt)
+        completion_tokens = estimate_tokens(mock_text)
+        total_tokens = prompt_tokens + completion_tokens
+        return AIResponse(
+            id=str(uuid4()),
+            response=mock_text,
+            model="demo-model",
+            usage={
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+            },
+            created_at=datetime.now().isoformat(),
+            interpretation=None,
+            confidence=None,
         )
+
+    # Initialize models using only providers that validated as working
+    try:
+        # Only pass working providers into initialization to avoid spurious failures
+        ai_service.initialize_user_models(current_user, api_keys, working_keys=working_keys)
+    except Exception as e:
+        logger.warning("Failed to initialize models for %s: %s", current_user, e)
+        # Don't fail hard here if models can't be fully initialized; let subsequent checks surface problems
+
+    # Get available models and select one
+    available = ai_service.get_available_models(current_user)
+    logger.debug("available models for %s: %s", current_user, available)
+    model = request.model or (available[0] if available else None)
+
+    if not available:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No models available. Please add API keys in Settings.")
+
+    if not model or model not in available:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Model '{model}' not available. Available models: {', '.join(available)}")
+
+    # Generate response with timeout protection
+    try:
+        generated = await asyncio.wait_for(
+            ai_service.generate(
+                request.prompt,
+                model_name=model,
+                user_id=current_user,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+            ),
+            timeout=60.0
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="AI request timed out after 60 seconds. Please try again with a shorter prompt or lower max_tokens.")
+    except Exception as e:
+        error_msg = str(e)
+        import traceback
+        logger.error("Exception during generate (%s): %s", type(e).__name__, error_msg)
+        logger.debug(traceback.format_exc())
+        if "api key" in error_msg.lower():
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"API key authentication failed: {error_msg}")
+        elif "rate limit" in error_msg.lower():
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded. Please wait a moment and try again.")
+        elif "quota" in error_msg.lower():
+            raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="API quota exceeded. Please check your provider account.")
+        else:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"AI generation failed: {error_msg}")
+
+    # Calculate token usage and cost
+    prompt_tokens = estimate_tokens(request.prompt)
+    completion_tokens = estimate_tokens(generated)
+    total_tokens = prompt_tokens + completion_tokens
+
+    cost = calculate_cost(
+        model,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens
+    )
+
+    # Optional: run confidence/interpretation analysis if models available
+    interpretation: Optional[str] = None
+    confidence_payload: Optional[Dict] = None
+    try:
+        if CONF_SYSTEM_AVAILABLE:
+            available_models = set(ai_service.get_available_models(current_user))
+            # Only run if both OpenAI lightweight and Anthropic confidence models exist
+            if ("gpt-3.5-turbo" in available_models) and ("claude-3-haiku-20240307" in available_models):
+                cs = ConfidenceSystem(ai_service=ai_service, user_id=current_user)
+                analysis = await cs.interpret_request(request.prompt)
+                interpretation = analysis.interpreted_intent
+                confidence_payload = {
+                    "score": analysis.confidence_score,
+                    "reasoning": analysis.reasoning_trace,
+                    "clarifications": analysis.suggested_clarifications,
+                    "feedback_required": analysis.feedback_required,
+                }
+    except Exception as e:
+        # Don't fail the request if confidence system fails
+        logger.warning("ConfidenceSystem warning: %s", e)
+
+    # Record usage in database
+    try:
+        database_service.record_usage(
+            user_id=current_user,
+            model=model,
+            tokens_used=total_tokens,
+            cost=cost,
+        )
+    except Exception as e:
+        # Log but don't fail the request if usage recording fails
+        logger.warning("Failed to record usage for %s: %s", current_user, e)
+
+    return AIResponse(
+        id=str(uuid4()),
+        response=generated,
+        model=model,
+        usage={
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens
+        },
+        created_at=datetime.now().isoformat(),
+        routing_info=routing_decision,  # Include routing metadata
+        interpretation=interpretation,
+        confidence=confidence_payload,
+    )
 
 @router.get("/ai/history")
 async def get_request_history(
@@ -262,7 +312,11 @@ async def get_available_models(
                 existing.pop(m, None)
         return ai_service.get_available_models(current_user)
     except Exception as e:
+        # In case of failure, provide sensible defaults for the UI
         return ["gpt-4", "gpt-3.5-turbo", "claude-3"]
+
+
+
 
 @router.get("/keys")
 async def get_api_keys(
@@ -331,7 +385,7 @@ async def add_api_key(
         except Exception as e:
             # Log this error but don't fail the entire request, as the key is already saved.
             # A more robust system might use a background task queue here.
-            print(f"Note: Error initializing models for user {current_user} after adding key: {e}")
+            logger.warning("Error initializing models for user %s after adding key: %s", current_user, e)
             
         return {"status": "success", "message": f"{request.provider} key added successfully"}
     except HTTPException as e:
@@ -528,12 +582,20 @@ async def generate_image(
     request: ImageRequest,
     current_user: str = Depends(get_current_user)
 ):
-    """Generate image(s) with OpenAI Images API (OpenAI-only)."""
+    """Generate image(s) with OpenAI Images API (OpenAI-only).
+
+    If running in demo mode or no OpenAI key is configured, return a tiny
+    placeholder image so the frontend remains functional.
+    """
     # Ensure OpenAI key exists
     keys = key_manager.get_keys(current_user)
     openai_key = keys.get("openai")
-    if not openai_key:
-        raise HTTPException(status_code=400, detail="OpenAI API key not configured. Add it in Settings.")
+    DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+    if not openai_key or DEMO_MODE:
+        tiny_png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
+        data_url = f"data:image/png;base64,{tiny_png_b64}"
+        img = GeneratedImage(b64=tiny_png_b64, data_url=data_url)
+        return ImageResponse(id=str(uuid4()), created_at=datetime.now().isoformat(), model="demo-image", images=[img])
 
     # Lazy import to avoid hard dependency
     try:
@@ -575,7 +637,7 @@ async def generate_image(
                 cost=0.0,
             )
         except Exception as e:
-            print(f"Note: failed to record image usage: {e}")
+            logger.warning("failed to record image usage: %s", e)
 
         return ImageResponse(
             id=str(uuid4()),

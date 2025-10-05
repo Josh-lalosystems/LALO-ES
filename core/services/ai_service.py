@@ -27,6 +27,9 @@ try:
 except ImportError:
     LLAMA_AVAILABLE = False
 
+# Import local model wrapper
+from core.models.local_model import LocalAIModel
+
 class BaseAIModel(ABC):
     @abstractmethod
     async def generate(self, prompt: str, **kwargs) -> str:
@@ -128,6 +131,12 @@ class AIService:
     def initialize_user_models(self, user_id: str, api_keys: dict, working_keys: dict = None):
         """Initialize models for a specific user with their API keys"""
         self.models[user_id] = {}
+
+        # **LOCAL MODELS (Always available - no API keys needed)**
+        # These run on-premise using llama.cpp
+        self.models[user_id]["tinyllama-1.1b"] = LocalAIModel("tinyllama")
+        self.models[user_id]["liquid-tool-1.2b"] = LocalAIModel("liquid-tool")
+        self.models[user_id]["qwen-0.5b"] = LocalAIModel("qwen-0.5b")
 
         # Initialize OpenAI models only if key is working
         if api_keys.get("openai") and OPENAI_AVAILABLE and (working_keys is None or working_keys.get("openai", True)):
