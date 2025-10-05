@@ -252,6 +252,8 @@ POST   /api/agents/{id}/rate    # Rate agent
 - ✅ Added 11 agent API endpoints
 - ✅ Moved progress reports to `docs/progress-reports/`
 - ✅ Created master status documentation
+ - ✅ Runtime executor: converted RealExecutor to async and added async worker support
+ - ✅ Runtime task validation: runtime assign endpoints now require a `prompt` and tests added for missing prompt and executor error handling
 
 ### September 2025:
 - ✅ Completed Steps 17-20 (RBAC, Audit, Governance, Secrets)

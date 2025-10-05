@@ -21,40 +21,45 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.database import Base, engine, SessionLocal, User
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
+import logging
 
 load_dotenv()
+
+logger = logging.getLogger("lalo.scripts.init_db")
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO)
 
 def check_encryption_key():
     """Check if encryption key is set, generate if missing"""
     encryption_key = os.getenv("ENCRYPTION_KEY")
 
     if not encryption_key:
-        print("WARNING: ENCRYPTION_KEY not set in environment")
-        print("   Generating a new key for this session...")
-        print("   WARNING: THIS KEY WILL NOT PERSIST - Add it to .env for production!")
+        logger.warning("ENCRYPTION_KEY not set in environment")
+        logger.info("Generating a new key for this session...")
+        logger.warning("WARNING: THIS KEY WILL NOT PERSIST - Add it to .env for production!")
         new_key = Fernet.generate_key().decode()
-        print(f"\n   Add this to your .env file:")
-        print(f"   ENCRYPTION_KEY={new_key}\n")
+        logger.info("Add this to your .env file:")
+        logger.info("ENCRYPTION_KEY=%s", new_key)
         os.environ["ENCRYPTION_KEY"] = new_key
         return False
     else:
-        print("[OK] ENCRYPTION_KEY is set")
+        logger.info("[OK] ENCRYPTION_KEY is set")
         return True
 
 def init_database():
     """Initialize database schema"""
-    print("Creating database tables...")
+    logger.info("Creating database tables...")
     try:
         Base.metadata.create_all(bind=engine)
-        print("[OK] All tables created successfully")
+        logger.info("[OK] All tables created successfully")
         return True
     except Exception as e:
-        print(f"[ERROR] Error creating tables: {e}")
+        logger.exception("[ERROR] Error creating tables: %s", e)
         return False
 
 def create_demo_user():
     """Create demo user for development"""
-    print("Creating demo user...")
+    logger.info("Creating demo user...")
     db = SessionLocal()
 
     try:
@@ -62,7 +67,7 @@ def create_demo_user():
         demo_user = db.query(User).filter(User.email == "demo-user@example.com").first()
 
         if demo_user:
-            print("[INFO] Demo user already exists (demo-user@example.com)")
+            logger.info("[INFO] Demo user already exists (demo-user@example.com)")
             return True
 
         # Create new demo user
@@ -71,12 +76,12 @@ def create_demo_user():
             email="demo-user@example.com"
         )
         db.add(demo_user)
-        db.commit()
-        print("[OK] Demo user created: demo-user@example.com")
+    db.commit()
+    logger.info("[OK] Demo user created: demo-user@example.com")
         return True
 
     except Exception as e:
-        print(f"[ERROR] Error creating demo user: {e}")
+    logger.exception("[ERROR] Error creating demo user: %s", e)
         db.rollback()
         return False
     finally:
@@ -84,62 +89,62 @@ def create_demo_user():
 
 def verify_database():
     """Verify database is properly set up"""
-    print("Verifying database setup...")
+    logger.info("Verifying database setup...")
     db = SessionLocal()
 
     try:
         # Check tables exist by querying
         user_count = db.query(User).count()
-        print(f"[OK] Database verified: {user_count} user(s) found")
+        logger.info("[OK] Database verified: %d user(s) found", user_count)
         return True
     except Exception as e:
-        print(f"[ERROR] Database verification failed: {e}")
+        logger.exception("[ERROR] Database verification failed: %s", e)
         return False
     finally:
         db.close()
 
 def main():
     """Main initialization function"""
-    print("="* 60)
-    print("LALO AI - Database Initialization")
-    print("="* 60)
-    print()
+    logger.info("%s", "=" * 60)
+    logger.info("LALO AI - Database Initialization")
+    logger.info("%s", "=" * 60)
+    logger.info("")
 
     # Check encryption key
     encryption_key_exists = check_encryption_key()
-    print()
+    logger.info("")
 
     # Initialize database
     if not init_database():
-        print("\n[FAILED] Database initialization failed")
+        logger.error("Database initialization failed")
         sys.exit(1)
-    print()
+    logger.info("")
 
     # Create demo user
     if not create_demo_user():
-        print("\n[FAILED] Demo user creation failed")
+        logger.error("Demo user creation failed")
         sys.exit(1)
-    print()
+    logger.info("")
 
     # Verify setup
     if not verify_database():
-        print("\n[FAILED] Database verification failed")
+        logger.error("Database verification failed")
         sys.exit(1)
-    print()
+    logger.info("")
 
-    print("="* 60)
-    print("[SUCCESS] Database initialization complete!")
-    print("="* 60)
-    print()
-    print("Next steps:")
-    print("1. If ENCRYPTION_KEY was generated, add it to your .env file")
-    print("2. Start the application: python app.py")
-    print("3. Access http://localhost:8000 and login with demo token")
-    print()
+    logger.info("%s", "=" * 60)
+    logger.info("[SUCCESS] Database initialization complete!")
+    logger.info("%s", "=" * 60)
+    logger.info("")
+    logger.info("Next steps:")
+    logger.info("1. If ENCRYPTION_KEY was generated, add it to your .env file")
+    logger.info("2. Start the application: python app.py")
+    logger.info("3. Access http://localhost:8000 and login with demo token")
+    logger.info("")
 
     if not encryption_key_exists:
-        print("IMPORTANT: Don't forget to save the ENCRYPTION_KEY to .env!")
-        print()
+        logger.warning("IMPORTANT: Don't forget to save the ENCRYPTION_KEY to .env!")
+        logger.info("")
 
 if __name__ == "__main__":
     main()

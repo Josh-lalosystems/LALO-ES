@@ -1,4 +1,35 @@
 """
+Agent Orchestrator - coordinates agents, workflows and execution.
+
+This is intentionally lightweight: it delegates execution to the pluggable
+executor and manages assignment through the runtime agent manager.
+"""
+from typing import Dict, Any, Tuple
+import logging
+
+from core.services.agent_runtime import runtime_agent_manager
+from core.services.executor import default_executor, start_executor_worker
+
+logger = logging.getLogger(__name__)
+
+
+class AgentOrchestrator:
+    def __init__(self, start_worker: bool = True):
+        self.executor_stop_event = None
+        if start_worker:
+            self.executor_stop_event = start_executor_worker(default_executor)
+            logger.info("AgentOrchestrator started executor worker")
+
+    def assign_task(self, agent_type: str, task: Dict[str, Any]) -> Tuple[str, str]:
+        """Assign a task to an agent of the requested type (creates one if needed)."""
+        agent_id, task_id = runtime_agent_manager.assign_task(agent_type, task)
+        logger.info("Orchestrator assigned task %s to agent %s", task_id, agent_id)
+        return agent_id, task_id
+
+
+# Global instance used by routes
+agent_orchestrator = AgentOrchestrator()
+"""
 Agent Orchestrator - Coordinates multi-model, multi-tool workflows
 
 Integrates with:

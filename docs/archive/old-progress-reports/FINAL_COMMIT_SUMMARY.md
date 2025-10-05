@@ -384,7 +384,7 @@ git log origin/cf/phase3-frontend-ux -1
 python -m pytest tests/ -v
 
 # Check backend
-python -c "import app; print('Backend OK')"
+python -c "import logging, app; logging.basicConfig(level=logging.INFO); logging.getLogger('lalo.docs').info('Backend OK')"
 
 # Build frontend
 cd lalo-frontend && npm run build

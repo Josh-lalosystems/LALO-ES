@@ -257,7 +257,7 @@ python -m pytest tests/test_specific.py -v
 python -m pytest tests/ -v --tb=long
 
 # Check imports
-python -c "import app; print('OK')"
+python -c "import logging, app; logging.basicConfig(level=logging.INFO); logging.getLogger('lalo.docs').info('OK')"
 ```
 
 ---

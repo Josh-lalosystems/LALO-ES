@@ -26,7 +26,7 @@
 1. Confirm current branch is `cf/phase3-frontend-ux`
 2. Verify `core/tools/` has 10 .py files
 3. Check that all imports are working
-4. Run: `python -c "from core.tools import tool_registry; print(len(tool_registry.get_all_tools()))"`
+4. Run: `python -c "import logging; logging.basicConfig(level=logging.INFO); from core.tools import tool_registry; logging.getLogger('lalo.docs').info(len(tool_registry.get_all_tools()))"`
    - Expected output: 7 (the number of registered tools)
 
 ---

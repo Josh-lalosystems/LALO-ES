@@ -210,8 +210,10 @@ Provide ONLY the JSON, no other text."""
 
         except json.JSONDecodeError as e:
             # Fallback if JSON parsing fails
-            print(f"Warning: Failed to parse confidence analysis JSON: {e}")
-            print(f"Response was: {response}")
+            import logging
+            logger = logging.getLogger('confidence_system')
+            logger.warning("Failed to parse confidence analysis JSON: %s", e)
+            logger.debug("Response was: %s", response)
             return {
                 "score": 0.7,
                 "reasoning": ["Automated confidence assessment"],

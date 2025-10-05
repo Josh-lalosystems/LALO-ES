@@ -1,16 +1,57 @@
 # LALO AI Platform
 
+![CI](https://github.com/Josh-lalosystems/LALO-ES/actions/workflows/python-tests.yml/badge.svg)
+
 ## Overview
 LALO is a workflow automation and chat platform for professional agents, investors, and end users. It features:
+- **100% Local AI Inference** - No cloud dependencies, runs on CPU/GPU
+- **Router-Based Architecture** - Intelligent request routing for optimal performance
 - Professional chat UI (see `lalo-frontend/src/components/Chat/`)
 - Data connectors (SharePoint, Cloud, Database)
-- Workflow automation
-- Feedback and continuous learning
+- Workflow automation with multi-model orchestration
+- Confidence validation and quality scoring
 - Demo data and scripts
 
-## Getting Started
-- See [`docs/USER_MANUAL.md`](docs/USER_MANUAL.md) for instructions
-- See [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) for deployment
+## Quick Start - Local Inference
+
+### 1. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Download AI Models (Required)
+Download open-source models to run locally (no API keys needed):
+```bash
+python scripts/download_models.py
+```
+
+This downloads:
+- **TinyLlama 1.1B** (669 MB) - General chat
+- **Liquid Tool 1.2B** (752 MB) - Function calling & routing
+- **Qwen 0.5B** (352 MB) - Confidence validation
+
+Total: ~1.8 GB
+
+### 3. Start the Server
+```bash
+python app.py
+```
+
+Navigate to http://localhost:8000
+
+### 4. Use Local Models
+- Select "Auto (Router Decides)" for intelligent routing
+- Or manually select TinyLlama, Liquid Tool, or Qwen models
+- No API keys required - 100% local inference
+
+### Optional: Add Cloud Models
+Go to Settings → Add OpenAI or Anthropic API keys for cloud fallback.
+
+---
+
+## Full Documentation
+- See [`docs/USER_MANUAL.md`](docs/USER_MANUAL.md) for detailed instructions
+- See [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) for production deployment
 - Seed demo data: `python scripts/seed_demo_data.py`
 
 ## Demo & Documentation
@@ -56,9 +97,26 @@ or external APIs.
 
 ## Quick pointers
 
-- See `INSTALL_AND_RUN.md` for step-by-step local startup instructions (no Docker).
-- See `INSTALL_DOCKER.md` if you prefer Docker Compose.
-- Use the `.env.example` to create a `.env` file and override endpoints or enable local models.
+
+## Running tests (developer)
+
+For local development and CI, we provide a small dev requirements file for test tooling. Install dev deps into your virtualenv:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+```
+
+Then run the pytest suite:
+
+```powershell
+# From repository root
+python -m pytest -q
+```
+
+Notes:
+- Tests use fixtures in `tests/conftest.py` to mock authentication and AI providers so they don't require real API keys.
+- If you prefer to run the app in demo mode for manual frontend testing, set `DEMO_MODE=true` in `.env`. Demo mode bypasses auth and auto-provisions demo keys for quick experimentation (do NOT enable in production).
+
 
 ## Demo flow (high level)
 

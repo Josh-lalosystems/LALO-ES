@@ -5,15 +5,18 @@ import os
 import sys
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
+import logging
+
+logger = logging.getLogger('test_startup')
 
 # Load environment
 load_dotenv()
 
 def test_startup_validation():
     """Run the same validation checks as app.py startup"""
-    print("="* 60)
-    print("LALO AI System - Startup Validation Test")
-    print("="* 60)
+    logger.info("%s", "="*60)
+    logger.info("LALO AI System - Startup Validation Test")
+    logger.info("%s", "="*60)
 
     warnings = []
     errors = []
@@ -30,7 +33,7 @@ def test_startup_validation():
         else:
             warnings.append("JWT_SECRET_KEY is using default value (OK for development)")
     else:
-        print("[OK] JWT_SECRET_KEY is configured")
+        logger.info("[OK] JWT_SECRET_KEY is configured")
 
     # Check encryption key
     encryption_key = os.getenv("ENCRYPTION_KEY")
@@ -39,26 +42,26 @@ def test_startup_validation():
     else:
         try:
             Fernet(encryption_key.encode())
-            print("[OK] ENCRYPTION_KEY is valid")
+            logger.info("[OK] ENCRYPTION_KEY is valid")
         except Exception as e:
             errors.append(f"ENCRYPTION_KEY is invalid: {e}")
 
     # Check demo mode
     if DEMO_MODE:
         warnings.append("DEMO_MODE is enabled - authentication is bypassed!")
-        print("[WARNING] Running in DEMO MODE - authentication bypassed")
+        logger.warning("Running in DEMO MODE - authentication bypassed")
     else:
-        print("[OK] DEMO_MODE is disabled")
+        logger.info("DEMO_MODE is disabled")
 
     # Check database exists
     db_path = "lalo.db"
     if not os.path.exists(db_path):
         warnings.append(f"Database not found at {db_path}")
     else:
-        print(f"[OK] Database found at {db_path}")
+        logger.info("[OK] Database found at %s", db_path)
 
     # Environment info
-    print(f"[INFO] Environment: {APP_ENV}")
+    logger.info("[INFO] Environment: %s", APP_ENV)
 
     # Check CORS origins based on environment
     if APP_ENV == "production":
@@ -68,27 +71,27 @@ def test_startup_validation():
     else:
         allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
-    print(f"[INFO] CORS Origins: {', '.join(allowed_origins)}")
+    logger.info("[INFO] CORS Origins: %s", ', '.join(allowed_origins))
 
     # Print warnings
     if warnings:
-        print("\n" + "="* 60)
-        print("WARNINGS:")
+        logger.info('\n' + '='*60)
+        logger.info('WARNINGS:')
         for warning in warnings:
-            print(f"  [!] {warning}")
+            logger.warning('  [!] %s', warning)
 
     # Print errors
     if errors:
-        print("\n" + "="* 60)
-        print("ERRORS:")
+        logger.error('\n' + '='*60)
+        logger.error('ERRORS:')
         for error in errors:
-            print(f"  [X] {error}")
-        print("="* 60)
+            logger.error('  [X] %s', error)
+        logger.error('%s', '='*60)
         return False
 
-    print("="* 60)
-    print("[SUCCESS] Startup validation complete")
-    print("="* 60)
+    logger.info('%s', '='*60)
+    logger.info('[SUCCESS] Startup validation complete')
+    logger.info('%s', '='*60)
     return True
 
 if __name__ == "__main__":

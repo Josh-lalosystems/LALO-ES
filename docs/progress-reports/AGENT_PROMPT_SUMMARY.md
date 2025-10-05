@@ -35,7 +35,7 @@ ls core/tools/*.py | wc -l
 # Must show: 10
 
 # 3. Verify imports work
-python -c "from core.tools import tool_registry; print(len(tool_registry.get_all_tools()))"
+python -c "import logging; logging.basicConfig(level=logging.INFO); from core.tools import tool_registry; logging.getLogger('lalo.docs').info(len(tool_registry.get_all_tools()))"
 # Must show: 7
 ```
 

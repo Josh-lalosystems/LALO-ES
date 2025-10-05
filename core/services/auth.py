@@ -8,6 +8,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import logging
+logger = logging.getLogger('core.services.auth')
+
 # JWT Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-here")
 ALGORITHM = "HS256"
@@ -71,7 +74,8 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
 
         # Auto-provision demo API keys if configured
         try:
-            from core.services.key_management import key_manager
+            from core.services.key_management import key_manager, APIKeyRequest
+            from pydantic import SecretStr
             existing_keys = key_manager.get_keys(user_id)
 
             if not existing_keys:
@@ -79,16 +83,17 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
                 demo_anthropic = os.getenv("DEMO_ANTHROPIC_KEY", "")
 
                 if demo_openai or demo_anthropic:
-                    print(f"[DEMO] Auto-provisioning API keys for {user_id}")
-                    key_manager.add_api_key(
-                        user_id,
-                        {
-                            "openai": demo_openai if demo_openai else None,
-                            "anthropic": demo_anthropic if demo_anthropic else None
-                        }
+                    logger.info("[DEMO] Auto-provisioning API keys for %s", user_id)
+                    key_request = APIKeyRequest(
+                        openai_key=SecretStr(demo_openai) if demo_openai else None,
+                        anthropic_key=SecretStr(demo_anthropic) if demo_anthropic else None
                     )
+                    key_manager.set_keys(user_id, key_request)
+                    logger.info("[DEMO] Successfully provisioned API keys")
         except Exception as e:
-            print(f"[DEMO] Warning: Could not auto-provision API keys: {e}")
+            logger.warning("[DEMO] Warning: Could not auto-provision API keys: %s", e)
+            import traceback
+            logger.debug(traceback.format_exc())
 
         return user_id
 

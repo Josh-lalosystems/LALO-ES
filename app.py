@@ -7,6 +7,14 @@ import uvicorn
 import os
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
+import logging
+
+# Central logging configuration for the application
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s %(name)s: %(message)s",
+)
+app_logger = logging.getLogger("lalo.app")
 
 # Load environment variables
 load_dotenv()
@@ -21,15 +29,16 @@ from core.middleware.auth_middleware import RBACMiddleware
 from core.routes.rbac_routes import router as rbac_router
 from core.routes.audit_routes import router as audit_router
 from core.routes.connector_routes import router as connector_router
+from core.routes.model_management_routes import router as model_management_router
 
 # Startup/shutdown event handler using lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown"""
     # Startup
-    print("="* 60)
-    print("LALO AI System - Startup Validation")
-    print("="* 60)
+    app_logger.info("%s", "="*60)
+    app_logger.info("LALO AI System - Startup Validation")
+    app_logger.info("%s", "="*60)
 
     warnings = []
     errors = []
@@ -46,7 +55,7 @@ async def lifespan(app: FastAPI):
         else:
             warnings.append("JWT_SECRET_KEY is using default value (OK for development)")
     else:
-        print("[OK] JWT_SECRET_KEY is configured")
+        app_logger.info("[OK] JWT_SECRET_KEY is configured")
 
     # Check encryption key
     encryption_key = os.getenv("ENCRYPTION_KEY")
@@ -57,7 +66,7 @@ async def lifespan(app: FastAPI):
         try:
             # Validate it's a valid Fernet key
             Fernet(encryption_key.encode())
-            print("[OK] ENCRYPTION_KEY is valid")
+            app_logger.info("[OK] ENCRYPTION_KEY is valid")
         except Exception as e:
             errors.append(f"ENCRYPTION_KEY is invalid: {e}")
 
@@ -65,9 +74,9 @@ async def lifespan(app: FastAPI):
     if DEMO_MODE:
         warnings.append("DEMO_MODE is enabled - authentication is bypassed!")
         warnings.append("   Set DEMO_MODE=false in .env for production")
-        print("[WARNING] Running in DEMO MODE - authentication bypassed")
+        app_logger.warning("Running in DEMO MODE - authentication bypassed")
     else:
-        print("[OK] DEMO_MODE is disabled")
+        app_logger.info("DEMO_MODE is disabled")
 
     # Check database exists
     db_path = "lalo.db"
@@ -75,36 +84,36 @@ async def lifespan(app: FastAPI):
         warnings.append(f"Database not found at {db_path}")
         warnings.append("   Run 'python scripts/init_db.py' to create it")
     else:
-        print(f"[OK] Database found at {db_path}")
+        app_logger.info("[OK] Database found at %s", db_path)
 
     # Environment info
-    print(f"[INFO] Environment: {APP_ENV}")
+    app_logger.info("[INFO] Environment: %s", APP_ENV)
 
     # Print warnings
     if warnings:
-        print("\n" + "="* 60)
-        print("WARNINGS:")
+        app_logger.info('\n' + '='*60)
+        app_logger.info('WARNINGS:')
         for warning in warnings:
-            print(f"  [!] {warning}")
+            app_logger.warning('  [!] %s', warning)
 
     # Print errors and exit if critical
     if errors:
-        print("\n" + "="* 60)
-        print("ERRORS:")
+        app_logger.error('\n' + '='*60)
+        app_logger.error('ERRORS:')
         for error in errors:
-            print(f"  [X] {error}")
-        print("="* 60)
+            app_logger.error('  [X] %s', error)
+        app_logger.error('%s', '='*60)
         raise RuntimeError("Configuration errors detected - see above")
 
-    print("="* 60)
-    print("[SUCCESS] Startup validation complete")
-    print("="* 60)
-    print()
+    app_logger.info('%s', '='*60)
+    app_logger.info('[SUCCESS] Startup validation complete')
+    app_logger.info('%s', '='*60)
+    app_logger.info('')
 
     yield  # Server runs here
 
     # Shutdown
-    print("Shutting down LALO AI System...")
+    app_logger.info('Shutting down LALO AI System...')
 
 # Create FastAPI app with lifespan
 app = FastAPI(
@@ -156,6 +165,7 @@ app.include_router(agent_router, tags=["Agents"])
 app.include_router(rbac_router, tags=["RBAC"])
 app.include_router(audit_router, tags=["Audit"])
 app.include_router(connector_router, tags=["Connectors"])
+app.include_router(model_management_router, tags=["Model Management"])
 
 # Serve static files (React build)
 if os.path.exists("lalo-frontend/build"):

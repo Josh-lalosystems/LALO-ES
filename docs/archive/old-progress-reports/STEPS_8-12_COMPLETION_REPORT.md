@@ -372,7 +372,7 @@ According to the roadmap, the next priorities are:
 ### Verify Tool Registration:
 ```bash
 cd c:/IT/LALOai-main
-python -c "from core.tools import tool_registry; print('Registered tools:', tool_registry.list_tools())"
+python -c "import logging; logging.basicConfig(level=logging.INFO); from core.tools import tool_registry; logging.getLogger('lalo.docs').info('Registered tools: %s', tool_registry.list_tools())"
 ```
 
 ### Test Individual Tools:

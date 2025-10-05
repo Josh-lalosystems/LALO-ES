@@ -7,44 +7,54 @@ Tests that the workflow endpoints are working correctly
 Does NOT require real API keys (will fail gracefully at AI calls)
 """
 
+import logging
 import requests
 import json
+import traceback
 
 BASE_URL = "http://localhost:8000"
 
+logger = logging.getLogger("lalo.test_workflow_basic")
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO)
+
+
 def test_health():
     """Test health endpoint"""
-    print("Testing health endpoint...")
+    logger.info("Testing health endpoint...")
     response = requests.get(f"{BASE_URL}/health")
     assert response.status_code == 200
-    print("[PASS] Health check")
+    logger.info("[PASS] Health check")
+
 
 def test_get_token():
     """Get demo token"""
-    print("\nGetting demo token...")
+    logger.info("Getting demo token...")
     response = requests.post(f"{BASE_URL}/auth/demo-token")
     assert response.status_code == 200
     token = response.json()["access_token"]
-    print(f"[PASS] Token received: {token[:50]}...")
+    logger.info("[PASS] Token received: %s...", token[:50])
     return token
+
 
 def test_check_keys(token):
     """Check if user has API keys"""
-    print("\nChecking API keys...")
+    logger.info("Checking API keys...")
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.get(f"{BASE_URL}/api/keys", headers=headers)
     assert response.status_code == 200
     keys = response.json()
-    print(f"[INFO] Found {len(keys)} API key(s)")
+    logger.info("[INFO] Found %d API key(s)", len(keys))
     for key in keys:
-        print(f"  - {key['provider']}")
+        logger.info("  - %s", key['provider'])
     return len(keys) > 0
+
 
 def test_workflow_start(token):
     """Test workflow start endpoint"""
-    print("\n" + "=" * 60)
-    print("Testing Workflow Start (Step 1: Interpretation)")
-    print("=" * 60)
+    logger.info("%s", "\n" + "=" * 60)
+    logger.info("Testing Workflow Start (Step 1: Interpretation)")
+    logger.info("%s", "=" * 60)
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -61,38 +71,39 @@ def test_workflow_start(token):
         json=payload
     )
 
-    print(f"Status Code: {response.status_code}")
+    logger.info("Status Code: %s", response.status_code)
 
     if response.status_code == 200:
         data = response.json()
-        print("\n[SUCCESS] Workflow started!")
-        print(f"Session ID: {data['session_id']}")
-        print(f"Current State: {data['current_state']}")
-        print(f"\nOriginal Request: {data['original_request']}")
-        print(f"\nInterpreted Intent:\n{data.get('interpreted_intent', 'N/A')}")
-        print(f"\nConfidence Score: {data.get('confidence_score', 'N/A')}")
+        logger.info("[SUCCESS] Workflow started!")
+        logger.info("Session ID: %s", data['session_id'])
+        logger.info("Current State: %s", data['current_state'])
+        logger.info("Original Request: %s", data['original_request'])
+        logger.info("Interpreted Intent:\n%s", data.get('interpreted_intent', 'N/A'))
+        logger.info("Confidence Score: %s", data.get('confidence_score', 'N/A'))
 
         if data.get('reasoning_trace'):
-            print("\nReasoning Trace:")
+            logger.info("\nReasoning Trace:")
             for idx, reason in enumerate(data['reasoning_trace'], 1):
-                print(f"  {idx}. {reason}")
+                logger.info("  %d. %s", idx, reason)
 
         if data.get('suggested_clarifications'):
-            print("\nSuggested Clarifications:")
+            logger.info("\nSuggested Clarifications:")
             for idx, clarification in enumerate(data['suggested_clarifications'], 1):
-                print(f"  {idx}. {clarification}")
+                logger.info("  %d. %s", idx, clarification)
 
         return data['session_id']
 
     else:
-        print(f"\n[FAIL] Response: {response.json()}")
+        logger.info("[FAIL] Response: %s", response.json())
         return None
+
 
 def test_workflow_status(token, session_id):
     """Test get workflow status"""
-    print("\n" + "=" * 60)
-    print("Testing Get Workflow Status")
-    print("=" * 60)
+    logger.info("%s", "\n" + "=" * 60)
+    logger.info("Testing Get Workflow Status")
+    logger.info("%s", "=" * 60)
 
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.get(
@@ -100,24 +111,25 @@ def test_workflow_status(token, session_id):
         headers=headers
     )
 
-    print(f"Status Code: {response.status_code}")
+    logger.info("Status Code: %s", response.status_code)
 
     if response.status_code == 200:
         data = response.json()
-        print(f"\n[SUCCESS] Status retrieved")
-        print(f"Session ID: {data['session_id']}")
-        print(f"Current State: {data['current_state']}")
-        print(f"Confidence Score: {data.get('confidence_score')}")
+        logger.info("[SUCCESS] Status retrieved")
+        logger.info("Session ID: %s", data['session_id'])
+        logger.info("Current State: %s", data['current_state'])
+        logger.info("Confidence Score: %s", data.get('confidence_score'))
         return True
     else:
-        print(f"\n[FAIL] Response: {response.json()}")
+        logger.info("[FAIL] Response: %s", response.json())
         return False
+
 
 def test_feedback(token, session_id):
     """Test submitting feedback"""
-    print("\n" + "=" * 60)
-    print("Testing Feedback Submission")
-    print("=" * 60)
+    logger.info("%s", "\n" + "=" * 60)
+    logger.info("Testing Feedback Submission")
+    logger.info("%s", "=" * 60)
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -135,23 +147,24 @@ def test_feedback(token, session_id):
         json=payload
     )
 
-    print(f"Status Code: {response.status_code}")
+    logger.info("Status Code: %s", response.status_code)
 
     if response.status_code == 200:
         data = response.json()
-        print(f"\n[SUCCESS] Feedback recorded")
-        print(f"Interpretation Approved: {data.get('interpretation_approved')}")
-        print(f"Feedback History Length: {len(data.get('feedback_history', []))}")
+        logger.info("[SUCCESS] Feedback recorded")
+        logger.info("Interpretation Approved: %s", data.get('interpretation_approved'))
+        logger.info("Feedback History Length: %d", len(data.get('feedback_history', [])))
         return True
     else:
-        print(f"\n[FAIL] Response: {response.json()}")
+        logger.info("[FAIL] Response: %s", response.json())
         return False
+
 
 def test_advance_workflow(token, session_id):
     """Test advancing workflow to next step"""
-    print("\n" + "=" * 60)
-    print("Testing Workflow Advance (to Planning)")
-    print("=" * 60)
+    logger.info("%s", "\n" + "=" * 60)
+    logger.info("Testing Workflow Advance (to Planning)")
+    logger.info("%s", "=" * 60)
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -163,25 +176,26 @@ def test_advance_workflow(token, session_id):
         headers=headers
     )
 
-    print(f"Status Code: {response.status_code}")
+    logger.info("Status Code: %s", response.status_code)
 
     if response.status_code == 200:
         data = response.json()
-        print(f"\n[SUCCESS] Workflow advanced")
-        print(f"New State: {data['current_state']}")
+        logger.info("[SUCCESS] Workflow advanced")
+        logger.info("New State: %s", data['current_state'])
         if data.get('action_plan'):
-            print(f"\nAction Plan Generated:")
-            print(json.dumps(data['action_plan'], indent=2))
+            logger.info("Action Plan Generated:")
+            logger.info(json.dumps(data['action_plan'], indent=2))
         return True
     else:
-        print(f"\n[FAIL] Response: {response.json()}")
+        logger.info("[FAIL] Response: %s", response.json())
         return False
+
 
 def test_list_sessions(token):
     """Test listing workflow sessions"""
-    print("\n" + "=" * 60)
-    print("Testing List Workflow Sessions")
-    print("=" * 60)
+    logger.info("%s", "\n" + "=" * 60)
+    logger.info("Testing List Workflow Sessions")
+    logger.info("%s", "=" * 60)
 
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.get(
@@ -189,28 +203,27 @@ def test_list_sessions(token):
         headers=headers
     )
 
-    print(f"Status Code: {response.status_code}")
-
+    logger.info("Status Code: %s", response.status_code)
     if response.status_code == 200:
         sessions = response.json()
-        print(f"\n[SUCCESS] Found {len(sessions)} session(s)")
+        logger.info("[SUCCESS] Found %d session(s)", len(sessions))
         for session in sessions:
-            print(f"\n  Session: {session['session_id'][:8]}...")
-            print(f"  State: {session['current_state']}")
-            print(f"  Request: {session['original_request'][:50]}...")
+            logger.info("Session: %s...", session['session_id'][:8])
+            logger.info("State: %s", session['current_state'])
+            logger.info("Request: %s...", session['original_request'][:50])
         return True
     else:
-        print(f"\n[FAIL] Response: {response.json()}")
+        logger.info("[FAIL] Response: %s", response.json())
         return False
 
-def main():
-    print("\n" + "=" * 70)
-    print("LALO WORKFLOW - BASIC STRUCTURE TEST")
-    print("=" * 70)
-    print("\nThis test validates the workflow API endpoints are working.")
-    print("It does NOT require real AI API keys.")
-    print()
 
+def main():
+    logger.info("%s", "\n" + "=" * 70)
+    logger.info("LALO WORKFLOW - BASIC STRUCTURE TEST")
+    logger.info("%s", "=" * 70)
+    logger.info("This test validates the workflow API endpoints are working.")
+    logger.info("It does NOT require real AI API keys.")
+    logger.info("")
     try:
         # Run tests
         test_health()
@@ -218,15 +231,15 @@ def main():
         has_keys = test_check_keys(token)
 
         if not has_keys:
-            print("\n" + "=" * 60)
-            print("[WARNING] No API keys configured")
-            print("=" * 60)
-            print("\nThe workflow will attempt to start but may fail at AI calls.")
-            print("To fully test with real AI:")
-            print("1. Go to Settings in the frontend")
-            print("2. Add your OpenAI and/or Anthropic API keys")
-            print("3. Run this test again")
-            print()
+            logger.warning("%s", "\n" + "=" * 60)
+            logger.warning("[WARNING] No API keys configured")
+            logger.warning("%s", "=" * 60)
+            logger.warning("The workflow will attempt to start but may fail at AI calls.")
+            logger.warning("To fully test with real AI:")
+            logger.warning("1. Go to Settings in the frontend")
+            logger.warning("2. Add your OpenAI and/or Anthropic API keys")
+            logger.warning("3. Run this test again")
+            logger.warning("")
             input("Press Enter to continue anyway...")
 
         session_id = test_workflow_start(token)
@@ -237,29 +250,29 @@ def main():
             test_advance_workflow(token, session_id)
             test_list_sessions(token)
 
-            print("\n" + "=" * 70)
-            print("[SUCCESS] ALL WORKFLOW STRUCTURE TESTS PASSED")
-            print("=" * 70)
-            print("\nWorkflow endpoints are functioning correctly!")
-            print("\nDatabase Tables Created:")
-            print("  - workflow_sessions (stores all workflow state)")
-            print("\nAvailable Endpoints:")
-            print("  - POST /api/workflow/start")
-            print("  - GET  /api/workflow/{session_id}/status")
-            print("  - POST /api/workflow/{session_id}/feedback")
-            print("  - POST /api/workflow/{session_id}/advance")
-            print("  - GET  /api/workflow/sessions")
-            print()
+            logger.info("%s", "\n" + "=" * 70)
+            logger.info("[SUCCESS] ALL WORKFLOW STRUCTURE TESTS PASSED")
+            logger.info("%s", "=" * 70)
+            logger.info("Workflow endpoints are functioning correctly!")
+            logger.info("Database Tables Created:")
+            logger.info("  - workflow_sessions (stores all workflow state)")
+            logger.info("Available Endpoints:")
+            logger.info("  - POST /api/workflow/start")
+            logger.info("  - GET  /api/workflow/{session_id}/status")
+            logger.info("  - POST /api/workflow/{session_id}/feedback")
+            logger.info("  - POST /api/workflow/{session_id}/advance")
+            logger.info("  - GET  /api/workflow/sessions")
+            logger.info("")
         else:
-            print("\n[INFO] Workflow start failed (likely due to missing/invalid API keys)")
-            print("       But the endpoint structure is working correctly.")
+            logger.info("[INFO] Workflow start failed (likely due to missing/invalid API keys)")
+            logger.info("       But the endpoint structure is working correctly.")
 
     except AssertionError as e:
-        print(f"\n[FAIL] Test assertion failed: {e}")
+        logger.exception("Test assertion failed: %s", e)
     except Exception as e:
-        print(f"\n[FAIL] Test failed with error: {e}")
-        import traceback
+        logger.exception("Test failed with error: %s", e)
         traceback.print_exc()
+
 
 if __name__ == "__main__":
     main()

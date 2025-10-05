@@ -29,6 +29,9 @@ def seed_documents():
     conn.close()
 
 if __name__ == '__main__':
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("lalo.scripts.seed_demo_data")
     seed_agents()
     seed_documents()
-    print('Demo data seeded.')
+    logger.info('Demo data seeded.')

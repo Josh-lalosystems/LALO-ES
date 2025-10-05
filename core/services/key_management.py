@@ -134,6 +134,9 @@ class KeyManager:
         keys = self.get_keys(user_id)
         status: Dict[str, bool] = {}
 
+        import logging
+        logger = logging.getLogger('key_management')
+
         if "openai" in keys and AsyncOpenAI is not None:
             try:
                 client = AsyncOpenAI(api_key=keys["openai"])
@@ -145,7 +148,7 @@ class KeyManager:
                 )
                 status["openai"] = True
             except Exception as e:
-                print(f"OpenAI key validation failed: {str(e)}")
+                logger.warning("OpenAI key validation failed: %s", str(e))
                 status["openai"] = False
 
         if "anthropic" in keys and AsyncAnthropic is not None:
@@ -159,7 +162,7 @@ class KeyManager:
                 )
                 status["anthropic"] = True
             except Exception as e:
-                print(f"Anthropic key validation failed: {str(e)}")
+                logger.warning("Anthropic key validation failed: %s", str(e))
                 status["anthropic"] = False
 
         return status

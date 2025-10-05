@@ -284,7 +284,7 @@ After Steps 8-16, the LALO AI platform now has **7 fully functional tools**:
 
 **Verification Command:**
 ```bash
-python -c "from core.tools import tool_registry; tools = tool_registry.get_all_tools(); print(f'Total: {len(tools)}'); [print(f'  - {n}: {t.is_enabled()}') for n,t in tools.items()]"
+python -c "import logging; logging.basicConfig(level=logging.INFO); from core.tools import tool_registry; tools = tool_registry.get_all_tools(); logging.getLogger('lalo.docs').info(f'Total: {len(tools)}'); [logging.getLogger('lalo.docs').info(f'  - {n}: {t.is_enabled()}') for n,t in tools.items()]"
 ```
 
 **Output:**

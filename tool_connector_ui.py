@@ -37,7 +37,9 @@ class UiToolConnector:
         flow = app.initiate_device_flow(scopes=self.scopes)
         if "user_code" not in flow:
             raise RuntimeError("Failed to create device flow")
-        print(f"Go to {flow['verification_uri']} and enter code: {flow['user_code']}")
+        import logging
+        logger = logging.getLogger('tool_connector_ui')
+        logger.info("Go to %s and enter code: %s", flow['verification_uri'], flow['user_code'])
         # Open the browser automatically
         webbrowser.open(flow['verification_uri'])
         result = app.acquire_token_by_device_flow(flow)

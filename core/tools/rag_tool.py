@@ -24,57 +24,26 @@ class RAGTool(BaseTool):
     """RAG tool for document indexing and semantic search"""
 
     def __init__(self):
-        self._chroma_client = None
-        self._collection = None
-        self._embedding_function = None
+        self._store = None
         self._initialized = False
 
         # Configuration
-        self._persist_directory = os.getenv("CHROMA_PERSIST_DIR", "./data/chroma")
-        self._collection_name = os.getenv("CHROMA_COLLECTION", "lalo_documents")
         self._chunk_size = int(os.getenv("RAG_CHUNK_SIZE", "512"))
         self._chunk_overlap = int(os.getenv("RAG_CHUNK_OVERLAP", "50"))
+        self._collection_name = os.getenv("CHROMA_COLLECTION", "lalo_documents")
 
     async def _initialize(self):
-        """Lazy initialization of ChromaDB"""
+        """Lazy initialization of the configured vector store"""
         if self._initialized:
             return
 
         try:
-            import chromadb
-            from chromadb.utils import embedding_functions
-        except ImportError:
-            raise ValueError(
-                "chromadb package not installed. "
-                "Run: pip install chromadb"
-            )
+            from core.vectorstores import get_vector_store
 
-        # Initialize ChromaDB client
-        self._chroma_client = chromadb.PersistentClient(path=self._persist_directory)
-
-        # Use sentence transformers for embeddings (free, local)
-        try:
-            self._embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-                model_name="all-MiniLM-L6-v2"  # Fast, efficient model
-            )
+            self._store = get_vector_store()
+            await self._store.initialize()
         except Exception as e:
-            # Fallback to default embedding function
-            print(f"Warning: Could not load sentence-transformers model: {e}")
-            self._embedding_function = embedding_functions.DefaultEmbeddingFunction()
-
-        # Get or create collection
-        try:
-            self._collection = self._chroma_client.get_collection(
-                name=self._collection_name,
-                embedding_function=self._embedding_function
-            )
-        except Exception:
-            # Collection doesn't exist, create it
-            self._collection = self._chroma_client.create_collection(
-                name=self._collection_name,
-                embedding_function=self._embedding_function,
-                metadata={"description": "LALO AI document collection"}
-            )
+            raise ValueError(f"Vector store initialization failed: {e}")
 
         self._initialized = True
 
@@ -168,12 +137,8 @@ class RAGTool(BaseTool):
         top_k = kwargs.get("top_k", 5)
         filter_metadata = kwargs.get("filter_metadata")
 
-        # Perform semantic search
-        results = self._collection.query(
-            query_texts=[query],
-            n_results=top_k,
-            where=filter_metadata if filter_metadata else None
-        )
+        # Perform semantic search via vector store
+        results = await self._store.query(query, top_k=top_k, filter_metadata=filter_metadata)
 
         # Format results
         documents = []
@@ -247,12 +212,8 @@ class RAGTool(BaseTool):
                 error="No valid documents to index"
             )
 
-        # Add to ChromaDB
-        self._collection.add(
-            documents=chunks,
-            ids=chunk_ids,
-            metadatas=chunk_metadatas
-        )
+        # Add to vector store
+        await self._store.add_documents(chunks, chunk_ids, chunk_metadatas)
 
         return ToolExecutionResult(
             success=True,
@@ -271,14 +232,9 @@ class RAGTool(BaseTool):
 
     async def _list_documents(self, kwargs: Dict) -> ToolExecutionResult:
         """List all indexed documents"""
-        # Get collection stats
-        count = self._collection.count()
-
-        # Get sample of documents (ChromaDB limitation - can't easily get all unique titles)
-        sample_results = self._collection.get(
-            limit=min(100, count),
-            include=["metadatas"]
-        )
+        # Get collection stats and sample via vector store
+        count = await self._store.count()
+        sample_results = await self._store.get_sample(limit=min(100, count))
 
         # Extract unique titles
         titles = set()
@@ -306,8 +262,8 @@ class RAGTool(BaseTool):
                 error="Document IDs list is required for 'delete' action"
             )
 
-        # Delete from ChromaDB
-        self._collection.delete(ids=document_ids)
+        # Delete from vector store
+        await self._store.delete(document_ids)
 
         return ToolExecutionResult(
             success=True,
@@ -346,10 +302,17 @@ class RAGTool(BaseTool):
 
             chunks.append(chunk.strip())
 
-            # Move start position with overlap
-            start = end - self._chunk_overlap
-            if start >= text_length:
+            # If we've reached the end, stop to avoid infinite loops
+            if end >= text_length:
                 break
+
+            # Move start position with overlap, ensure it advances
+            next_start = end - self._chunk_overlap
+            if next_start <= start:
+                # fallback to end to ensure progress
+                start = end
+            else:
+                start = next_start
 
         return chunks
 

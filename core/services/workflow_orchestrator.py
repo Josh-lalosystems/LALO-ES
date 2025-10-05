@@ -12,7 +12,7 @@ Coordinates the complete 5-step LALO workflow:
 This is the main orchestration engine that brings everything together.
 """
 
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, List
 from datetime import datetime
 from core.database import SessionLocal, WorkflowSession, WorkflowState, FeedbackEvent
 from core.services.semantic_interpreter import semantic_interpreter
@@ -546,6 +546,108 @@ class WorkflowOrchestrator:
 
             return self._session_to_dict(session)
 
+        finally:
+            db.close()
+
+
+
+
+    async def reject_step(self, session_id: str, user_id: str, reason: str = None) -> Dict:
+        """
+        Mark current step as rejected and move workflow to ERROR state
+        """
+        db = SessionLocal()
+        try:
+            session = db.query(WorkflowSession).filter(WorkflowSession.session_id == session_id).first()
+            if not session:
+                return {}
+            session.current_state = WorkflowState.ERROR
+            session.error_message = reason or 'Rejected by user'
+            session.updated_at = datetime.utcnow()
+            self._record_feedback(db=db, session_id=session_id, user_id=user_id, step='reject', feedback_type='reject', feedback_value=reason)
+            db.commit()
+            return self._session_to_dict(session)
+        finally:
+            db.close()
+
+    async def list_sessions(self, user_id: str, limit: int = 20, offset: int = 0) -> List[Dict]:
+        db = SessionLocal()
+        try:
+            q = db.query(WorkflowSession).filter(WorkflowSession.user_id == user_id).order_by(WorkflowSession.created_at.desc()).limit(limit).offset(offset).all()
+            return [self._session_to_dict(s) for s in q]
+        finally:
+            db.close()
+
+    async def submit_feedback(self, session_id: str, user_id: str, feedback_type: str, message: str = None, rating: float = None) -> Dict:
+        """
+        Accepts a generic feedback payload from frontend and routes to appropriate handlers.
+        feedback_type: approve|reject|clarify|final
+        """
+        # Fetch session to determine current state
+        db = SessionLocal()
+        try:
+            session = db.query(WorkflowSession).filter(WorkflowSession.session_id == session_id).first()
+            if not session:
+                return {"error": "not_found"}
+
+            # Map feedback to actions based on current_state
+            state = session.current_state
+
+            if feedback_type == 'reject':
+                return await self.reject_step(session_id, user_id, reason=message)
+
+            if feedback_type == 'approve' or feedback_type == 'final':
+                # If interpretation pending
+                if state == WorkflowState.INTERPRETING or state.value == 'interpreting':
+                    await self.approve_interpretation(session_id, user_id, feedback=message)
+                elif state == WorkflowState.PLANNING or state.value == 'planning':
+                    await self.approve_plan(session_id, user_id, feedback=message)
+                elif state == WorkflowState.REVIEWING or state.value == 'reviewing' or feedback_type == 'final':
+                    await self.approve_results(session_id, user_id, feedback=message, rating=rating)
+
+                # Return updated status
+                return await self.get_workflow_status(session_id)
+
+            if feedback_type == 'clarify':
+                # Treat as refining interpretation
+                await self.approve_interpretation(session_id, user_id, feedback=message)
+                return await self.get_workflow_status(session_id)
+
+            # Unknown feedback type: record and return status
+            self._record_feedback(db=db, session_id=session_id, user_id=user_id, step='generic', feedback_type=feedback_type, feedback_value=message)
+            db.commit()
+            return self._session_to_dict(session)
+        finally:
+            db.close()
+
+    async def advance_workflow(self, session_id: str, user_id: str) -> Dict:
+        """
+        Manually advance workflow to next logical step if allowed.
+        """
+        db = SessionLocal()
+        try:
+            session = db.query(WorkflowSession).filter(WorkflowSession.session_id == session_id).first()
+            if not session:
+                return {"error": "not_found"}
+
+            cur = session.current_state
+            # If interpreting and pending approval, treat advance as approve
+            if cur == WorkflowState.INTERPRETING and session.interpretation_approved == 0:
+                await self.approve_interpretation(session_id, user_id, feedback=None)
+                return await self.get_workflow_status(session_id)
+
+            # If planning pending approval, approve to advance
+            if cur == WorkflowState.PLANNING and session.plan_approved == 0:
+                await self.approve_plan(session_id, user_id, feedback=None)
+                return await self.get_workflow_status(session_id)
+
+            # If reviewing, approve results
+            if cur == WorkflowState.REVIEWING:
+                await self.approve_results(session_id, user_id, feedback=None, rating=None)
+                return await self.get_workflow_status(session_id)
+
+            # If executing or backup_verify, can't manually advance here
+            return self._session_to_dict(session)
         finally:
             db.close()
 

@@ -17,6 +17,8 @@ Available tools:
 - api_call: Make HTTP requests to external APIs
 """
 
+import os
+
 from core.tools.base import (
     BaseTool,
     ToolDefinition,
@@ -31,15 +33,45 @@ from core.tools.code_executor import code_executor_tool
 from core.tools.file_operations import file_operations_tool
 from core.tools.database_query import database_query_tool
 from core.tools.api_call import api_call_tool
+from core.tools.automation_tool import KeyboardMouseTool
+from core.tools.chrome_control_tool import ChromeControlTool
 
-# Register tools
-tool_registry.register_tool(web_search_tool, required_permissions=["web_access"])
-tool_registry.register_tool(rag_tool, required_permissions=["data_access"])
-tool_registry.register_tool(image_generator_tool, required_permissions=["image_generation"])
-tool_registry.register_tool(code_executor_tool, required_permissions=["code_execution"])
-tool_registry.register_tool(file_operations_tool, required_permissions=["filesystem_access"])
-tool_registry.register_tool(database_query_tool, required_permissions=["db_read_only"])
-tool_registry.register_tool(api_call_tool, required_permissions=["external_api_access"])
+# Initialize new tools
+_skip_init = os.getenv("SKIP_TOOL_INIT", "false").lower() == "true"
+
+keyboard_mouse_tool = None
+chrome_control_tool = None
+
+if not _skip_init:
+    # Initialize new tools (be resilient if a tool cannot be instantiated)
+    import logging
+    logger = logging.getLogger("lalo.tools")
+    try:
+        keyboard_mouse_tool = KeyboardMouseTool()
+    except Exception as e:
+        logger.warning("failed to initialize KeyboardMouseTool: %s", e)
+        keyboard_mouse_tool = None
+
+    try:
+        chrome_control_tool = ChromeControlTool()
+    except Exception as e:
+        logger.warning("failed to initialize ChromeControlTool: %s", e)
+        chrome_control_tool = None
+
+    # Register all tools
+    tool_registry.register_tool(web_search_tool, required_permissions=["web_access"])
+    tool_registry.register_tool(rag_tool, required_permissions=["data_access"])
+    tool_registry.register_tool(image_generator_tool, required_permissions=["image_generation"])
+    tool_registry.register_tool(code_executor_tool, required_permissions=["code_execution"])
+    tool_registry.register_tool(file_operations_tool, required_permissions=["filesystem_access"])
+    tool_registry.register_tool(database_query_tool, required_permissions=["db_read_only"])
+    tool_registry.register_tool(api_call_tool, required_permissions=["external_api_access"])
+
+    # Only register keyboard/chrome tools if they were instantiated
+    if keyboard_mouse_tool is not None:
+        tool_registry.register_tool(keyboard_mouse_tool, required_permissions=["automation:keyboard", "automation:mouse"])
+    if chrome_control_tool is not None:
+        tool_registry.register_tool(chrome_control_tool, required_permissions=["automation:browser", "web:access"])
 
 __all__ = [
     "BaseTool",

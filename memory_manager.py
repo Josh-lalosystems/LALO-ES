@@ -28,6 +28,8 @@ import uuid
 import json
 from datetime import datetime
 from .audit_logger import AuditLogger
+import logging
+logger = logging.getLogger('memory_manager')
 
 # Third-party imports
 import redis
@@ -64,7 +66,7 @@ class MemoryManager:
             self.redis.set(redis_key, json.dumps(payload))
         except Exception as e:
             # If Redis fails, still proceed to vector DB but log alert
-            print(f"[MemoryManager] Redis write failed: {e}")
+            logger.warning("[MemoryManager] Redis write failed: %s", e)
 
         # Long-term vector embedding for semantic retrieval
         embed = self.embedder.embed(json.dumps(trace))
@@ -78,7 +80,7 @@ class MemoryManager:
         try:
             self.vector.upsert(id=vector_id, vector=embed, metadata=metadata)
         except Exception as e:
-            print(f"[MemoryManager] Vector DB upsert failed: {e}")
+            logger.warning("[MemoryManager] Vector DB upsert failed: %s", e)
 
         # Audit linkage for legal/compliance trace
         self.audit.record_memory(agent_id=agent_id,
@@ -95,7 +97,7 @@ class MemoryManager:
             results = self.vector.query(query_vector=query_vec, top_k=top_k)
             return results  # list of dicts with metadata
         except Exception as e:
-            print(f"[MemoryManager] Vector recall failed: {e}")
+            logger.warning("[MemoryManager] Vector recall failed: %s", e)
             return []
 
     def get_session(self, agent_id: str):
@@ -107,5 +109,5 @@ class MemoryManager:
             raw = self.redis.get(redis_key)
             return json.loads(raw) if raw else None
         except Exception as e:
-            print(f"[MemoryManager] Redis retrieval failed: {e}")
+            logger.warning("[MemoryManager] Redis retrieval failed: %s", e)
             return None

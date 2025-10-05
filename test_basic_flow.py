@@ -12,68 +12,74 @@ Tests:
 
 import requests
 import json
+import logging
 
 BASE_URL = "http://localhost:8000"
 
+logger = logging.getLogger("lalo.test_basic_flow")
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO)
+
+
 def test_health():
     """Test health endpoint"""
-    print("=" * 60)
-    print("Testing health endpoint...")
+    logger.info("%s", "=" * 60)
+    logger.info("Testing health endpoint...")
     response = requests.get(f"{BASE_URL}/health")
-    print(f"Status: {response.status_code}")
-    print(f"Response: {response.json()}")
+    logger.info("Status: %s", response.status_code)
+    logger.info("Response: %s", response.json())
     assert response.status_code == 200
-    print("[PASS] Health check passed")
-    print()
+    logger.info("[PASS] Health check passed")
+    logger.info("")
 
 def test_demo_token():
     """Test demo token generation"""
-    print("=" * 60)
-    print("Testing demo token generation...")
+    logger.info("%s", "=" * 60)
+    logger.info("Testing demo token generation...")
     response = requests.post(f"{BASE_URL}/auth/demo-token")
-    print(f"Status: {response.status_code}")
+    logger.info("Status: %s", response.status_code)
     data = response.json()
-    print(f"Token received: {data['access_token'][:50]}...")
+    logger.info("Token received: %s...", data['access_token'][:50])
     assert response.status_code == 200
     assert "access_token" in data
-    print("[PASS] Demo token generation passed")
-    print()
+    logger.info("[PASS] Demo token generation passed")
+    logger.info("")
     return data["access_token"]
 
 def test_get_keys(token):
     """Test API key retrieval"""
-    print("=" * 60)
-    print("Testing API key retrieval...")
+    logger.info("%s", "=" * 60)
+    logger.info("Testing API key retrieval...")
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.get(f"{BASE_URL}/api/keys", headers=headers)
-    print(f"Status: {response.status_code}")
+    logger.info("Status: %s", response.status_code)
     data = response.json()
-    print(f"Keys found: {len(data)}")
+    logger.info("Keys found: %d", len(data))
     for key in data:
-        print(f"  - {key['provider']}: {key['name']}")
+        logger.info("  - %s: %s", key['provider'], key['name'])
     assert response.status_code == 200
-    print("[PASS] API key retrieval passed")
-    print()
+    logger.info("[PASS] API key retrieval passed")
+    logger.info("")
     return data
 
 def test_get_models(token):
     """Test available models endpoint"""
-    print("=" * 60)
-    print("Testing available models...")
+    logger.info("%s", "=" * 60)
+    logger.info("Testing available models...")
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.get(f"{BASE_URL}/api/ai/models", headers=headers)
-    print(f"Status: {response.status_code}")
+    logger.info("Status: %s", response.status_code)
     data = response.json()
-    print(f"Available models: {data}")
+    logger.info("Available models: %s", data)
     assert response.status_code == 200
-    print("[PASS] Available models passed")
-    print()
+    logger.info("[PASS] Available models passed")
+    logger.info("")
     return data
 
 def test_ai_request_without_real_key(token):
     """Test AI request (will fail without real API key, but tests routing)"""
-    print("=" * 60)
-    print("Testing AI request endpoint (without real API key)...")
+    logger.info("%s", "=" * 60)
+    logger.info("Testing AI request endpoint (without real API key)...")
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
@@ -85,22 +91,22 @@ def test_ai_request_without_real_key(token):
         "temperature": 0.7
     }
     response = requests.post(f"{BASE_URL}/api/ai/chat", headers=headers, json=payload)
-    print(f"Status: {response.status_code}")
+    logger.info("Status: %s", response.status_code)
 
     # This will likely fail with API key error, which is expected
     if response.status_code == 200:
-        print(f"Response: {response.json()}")
-        print("[PASS] AI request succeeded!")
+        logger.info("Response: %s", response.json())
+        logger.info("[PASS] AI request succeeded!")
     else:
-        print(f"Error (expected without real API key): {response.json()}")
-        print("[PASS] AI request endpoint is working (fails at API call as expected)")
-    print()
+        logger.info("Error (expected without real API key): %s", response.json())
+        logger.info("[PASS] AI request endpoint is working (fails at API call as expected)")
+    logger.info("")
 
 def main():
-    print("\n" + "=" * 60)
-    print("LALO AI - Basic Functionality Test")
-    print("=" * 60)
-    print()
+    logger.info("%s", "\n" + "=" * 60)
+    logger.info("LALO AI - Basic Functionality Test")
+    logger.info("%s", "=" * 60)
+    logger.info("")
 
     try:
         # Run tests
@@ -110,20 +116,21 @@ def main():
         test_get_models(token)
         test_ai_request_without_real_key(token)
 
-        print("=" * 60)
-        print("[SUCCESS] ALL BASIC TESTS PASSED")
-        print("=" * 60)
-        print()
-        print("Next steps:")
-        print("1. Add real API keys via the frontend Settings page")
-        print("2. Test AI requests with real models")
-        print("3. Check usage statistics")
-        print()
+        logger.info("%s", "=" * 60)
+        logger.info("[SUCCESS] ALL BASIC TESTS PASSED")
+        logger.info("%s", "=" * 60)
+        logger.info("")
+        logger.info("Next steps:")
+        logger.info("1. Add real API keys via the frontend Settings page")
+        logger.info("2. Test AI requests with real models")
+        logger.info("3. Check usage statistics")
+        logger.info("")
 
     except Exception as e:
-        print(f"\n[FAIL] TEST FAILED: {e}")
+        logger.exception("TEST FAILED: %s", e)
         import traceback
         traceback.print_exc()
+
 
 if __name__ == "__main__":
     main()

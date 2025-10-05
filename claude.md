@@ -1125,12 +1125,12 @@ See [Architecture Documentation](docs/architecture.md).
 
 ### JWT Secret
 ```bash
-python -c "import secrets; print(secrets.token_urlsafe(32))"
+python -c "import logging, secrets; logging.basicConfig(level=logging.INFO); logging.getLogger('lalo.docs').info(secrets.token_urlsafe(32))"
 ```
 
 ### Encryption Key
 ```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+python -c "import logging; logging.basicConfig(level=logging.INFO); from cryptography.fernet import Fernet; logging.getLogger('lalo.docs').info(Fernet.generate_key().decode())"
 ```
 
 ## First-Time Setup

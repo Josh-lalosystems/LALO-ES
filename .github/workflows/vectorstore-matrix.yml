@@ -1,0 +1,64 @@
+name: VectorStore Backend Matrix Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [chroma, qdrant]
+
+    services:
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+        options: >-
+          --health-cmd="curl -sS --fail http://localhost:6333/collections || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # optional ML deps; may fail in minimal env but not fatal
+          pip install -r requirements-ml.txt || true
+
+      - name: Wait for Qdrant (only for qdrant backend)
+        if: matrix.backend == 'qdrant'
+        run: |
+          echo "Waiting for Qdrant to be healthy..."
+          for i in {1..30}; do
+            if curl -sS --fail http://localhost:6333/collections; then
+              echo "Qdrant ready"; break
+            fi
+            sleep 2
+          done
+
+      - name: Run tests (matrix backend)
+        env:
+          VECTOR_BACKEND: ${{ matrix.backend }}
+        run: |
+          echo "Running tests with VECTOR_BACKEND=${VECTOR_BACKEND}"
+          if [ "${VECTOR_BACKEND}" = "qdrant" ]; then
+            export RUN_QDRANT_INTEGRATION=1
+          else
+            export RUN_QDRANT_INTEGRATION=0
+          fi
+          python -m pytest -q

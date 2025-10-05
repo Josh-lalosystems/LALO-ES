@@ -42,7 +42,9 @@ if __name__ == "__main__":
     vs.add_document("Production report for low margin items.")
     vs.add_document("Financial summary and sales trends for footwear.")
 
+    import logging
+    logger = logging.getLogger('vector_store')
     query = "high margin shoes Q2"
     matches = vs.query(query, top_k=2)
-    print("Query:", query)
-    print("Matches:", matches)
+    logger.info('Query: %s', query)
+    logger.info('Matches: %s', matches)

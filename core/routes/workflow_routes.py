@@ -160,10 +160,7 @@ async def get_workflow_status(
 ) -> WorkflowStatusResponse:
     """Get current status of a workflow session"""
     try:
-        session_dict = await workflow_orchestrator.get_workflow_status(
-            session_id=session_id,
-            user_id=current_user
-        )
+        session_dict = await workflow_orchestrator.get_workflow_status(session_id=session_id)
 
         if not session_dict:
             raise HTTPException(
@@ -291,3 +288,38 @@ async def list_workflow_sessions(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list sessions: {str(e)}"
         )
+
+
+@router.post("/{session_id}/feedback")
+async def submit_feedback(
+    session_id: str,
+    feedback: FeedbackRequest,
+    current_user: str = Depends(get_current_user)
+) -> WorkflowStatusResponse:
+    """Generic feedback endpoint used by frontend"""
+    try:
+        session_dict = await workflow_orchestrator.submit_feedback(
+            session_id=session_id,
+            user_id=current_user,
+            feedback_type=feedback.feedback_type,
+            message=feedback.message
+        )
+        return WorkflowStatusResponse(**session_dict)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post("/{session_id}/advance")
+async def advance_workflow(
+    session_id: str,
+    current_user: str = Depends(get_current_user)
+) -> WorkflowStatusResponse:
+    try:
+        session_dict = await workflow_orchestrator.advance_workflow(session_id=session_id, user_id=current_user)
+        return WorkflowStatusResponse(**session_dict)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

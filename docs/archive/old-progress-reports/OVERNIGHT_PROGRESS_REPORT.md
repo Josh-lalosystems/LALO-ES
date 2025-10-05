@@ -380,10 +380,10 @@ lalo.db.backup-20251004-*
 cd /c/IT/LALOai-main
 
 # Test imports
-python -c "from core.tools import tool_registry; print('Tools:', tool_registry)"
-python -c "from core.services.semantic_interpreter import semantic_interpreter; print('Interpreter:', semantic_interpreter)"
-python -c "from core.services.action_planner import action_planner; print('Planner:', action_planner)"
-python -c "from core.database import Base; print('Tables:', len([t for t in Base.metadata.sorted_tables]))"
+python -c "import logging; logging.basicConfig(level=logging.INFO); from core.tools import tool_registry; logging.getLogger('lalo.docs').info('Tools: %s', tool_registry)"
+python -c "import logging; logging.basicConfig(level=logging.INFO); from core.services.semantic_interpreter import semantic_interpreter; logging.getLogger('lalo.docs').info('Interpreter: %s', semantic_interpreter)"
+python -c "import logging; logging.basicConfig(level=logging.INFO); from core.services.action_planner import action_planner; logging.getLogger('lalo.docs').info('Planner: %s', action_planner)"
+python -c "import logging; logging.basicConfig(level=logging.INFO); from core.database import Base; logging.getLogger('lalo.docs').info('Tables: %d', len([t for t in Base.metadata.sorted_tables]))"
 ```
 
 ### 2. Continue with Steps 6-8
