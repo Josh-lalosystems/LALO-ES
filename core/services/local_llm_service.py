@@ -8,6 +8,7 @@ Optimized for 8GB RAM CPU-only development, scales to enterprise GPU clusters.
 import os
 import logging
 import asyncio
+import json
 from typing import Dict, Optional, List, Any
 from concurrent.futures import ThreadPoolExecutor
 
@@ -280,5 +281,219 @@ class LocalInferenceServer:
         logger.info("LocalInferenceServer shutdown complete")
 
 
-# Global instance
-local_llm_service = LocalInferenceServer()
+class FakeLocalInferenceServer:
+    """
+    Test-friendly fake local LLM server for CI testing.
+    
+    Provides deterministic, fast responses that exercise the same code paths
+    as the real LocalInferenceServer without requiring native llama-cpp binaries
+    or model files.
+    
+    Activated via USE_FAKE_LOCAL_LLM=1 environment variable.
+    """
+
+    def __init__(self, model_dir: str = "./models"):
+        self.model_dir = model_dir
+        self.models: Dict[str, bool] = {}  # Track loaded models (just names)
+        self.model_configs = {
+            # Same config structure as real server
+            "qwen-0.5b": {
+                "path": "qwen-0.5b/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+                "n_ctx": 2048,
+                "n_threads": 2,
+                "description": "Fast confidence scoring & validation"
+            },
+            "tinyllama": {
+                "path": "tinyllama/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+                "n_ctx": 2048,
+                "n_threads": 4,
+                "description": "General purpose chat"
+            },
+            "liquid-tool": {
+                "path": "liquid-tool/Liquid-1.2B-Tool-Q4_K_M.gguf",
+                "n_ctx": 2048,
+                "n_threads": 4,
+                "description": "Function calling & routing"
+            }
+        }
+        logger.info("FakeLocalInferenceServer initialized (test mode)")
+
+    def is_available(self) -> bool:
+        """Always available in test mode"""
+        return True
+
+    def load_model(self, model_name: str) -> bool:
+        """Simulate model loading"""
+        if model_name in self.models:
+            logger.info(f"Fake model {model_name} already loaded")
+            return True
+
+        if model_name not in self.model_configs:
+            logger.error(f"Unknown model: {model_name}")
+            return False
+
+        logger.info(f"Loading fake model {model_name}")
+        self.models[model_name] = True
+        logger.info(f"✓ Fake {model_name} loaded successfully")
+        return True
+
+    def unload_model(self, model_name: str):
+        """Simulate model unloading"""
+        if model_name in self.models:
+            del self.models[model_name]
+            logger.info(f"Unloaded fake {model_name}")
+
+    def unload_all_models(self):
+        """Unload all models"""
+        for model_name in list(self.models.keys()):
+            self.unload_model(model_name)
+
+    async def generate(
+        self,
+        prompt: str,
+        model_name: str = "tinyllama",
+        max_tokens: int = 512,
+        temperature: float = 0.7,
+        top_p: float = 0.95,
+        stop: Optional[List[str]] = None,
+        **kwargs
+    ) -> str:
+        """
+        Generate deterministic fake responses for testing.
+        
+        Returns JSON or text responses based on the model and prompt context.
+        """
+        # Load model if not already loaded
+        if model_name not in self.models:
+            self.load_model(model_name)
+
+        # Simulate brief processing delay
+        await asyncio.sleep(0.01)
+
+        # Generate response based on model and prompt content
+        if model_name == "liquid-tool":
+            # Router model - return routing decision
+            if "complexity" in prompt.lower() or "route" in prompt.lower():
+                # Parse complexity from prompt keywords
+                complexity = 0.3
+                if any(word in prompt.lower() for word in ["design", "analyze", "optimize", "architecture"]):
+                    complexity = 0.8
+                elif any(word in prompt.lower() for word in ["explain", "research", "create"]):
+                    complexity = 0.5
+                
+                return json.dumps({
+                    "path": "complex" if complexity > 0.6 else "simple",
+                    "complexity": complexity,
+                    "confidence": 0.85,
+                    "reasoning": "Automated routing decision from fake LLM",
+                    "recommended_model": "tinyllama",
+                    "requires_tools": complexity > 0.6,
+                    "requires_workflow": complexity > 0.7
+                })
+        
+        elif model_name == "qwen-0.5b":
+            # Confidence model - return confidence scores
+            if "score" in prompt.lower() or "confidence" in prompt.lower():
+                # Check output quality based on length and keywords
+                output_quality = 0.7
+                if "output" in prompt.lower():
+                    # Parse for quality indicators
+                    if len(prompt) > 500:
+                        output_quality = 0.8
+                    if "comprehensive" in prompt.lower() or "detailed" in prompt.lower():
+                        output_quality = 0.85
+                    if "hmm" in prompt.lower() or "i don't know" in prompt.lower():
+                        output_quality = 0.3
+                
+                return json.dumps({
+                    "confidence": output_quality,
+                    "scores": {
+                        "factual": output_quality,
+                        "consistent": output_quality + 0.05,
+                        "complete": output_quality - 0.05,
+                        "grounded": output_quality
+                    },
+                    "issues": [] if output_quality > 0.6 else ["Low quality output detected"],
+                    "recommendation": "accept" if output_quality >= 0.8 else "retry" if output_quality >= 0.6 else "escalate",
+                    "reasoning": "Automated confidence scoring from fake LLM"
+                })
+        
+        # Default response for general chat (tinyllama or unspecified)
+        # Provide a reasonable answer based on the prompt
+        if "what is" in prompt.lower():
+            topic = prompt.lower().split("what is")[-1].strip().rstrip("?").strip()
+            return f"The topic '{topic}' is an important concept. This is a test response from the fake local LLM."
+        elif any(q in prompt.lower() for q in ["how", "why", "when", "where"]):
+            return "This is a detailed explanation from the fake local LLM. It provides comprehensive information to answer the user's question with proper context and examples."
+        else:
+            return "This is a response generated by the fake local LLM for testing purposes. It simulates realistic output without requiring actual model inference."
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        model_name: str = "tinyllama",
+        max_tokens: int = 512,
+        temperature: float = 0.7,
+        **kwargs
+    ):
+        """
+        Generate text with fake streaming for testing.
+        
+        Yields text chunks to simulate streaming behavior.
+        """
+        if model_name not in self.models:
+            self.load_model(model_name)
+
+        # Generate response and stream it in chunks
+        response = await self.generate(
+            prompt=prompt,
+            model_name=model_name,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            **kwargs
+        )
+
+        # Stream in word chunks
+        words = response.split()
+        for i, word in enumerate(words):
+            await asyncio.sleep(0.001)  # Tiny delay to simulate streaming
+            if i < len(words) - 1:
+                yield word + " "
+            else:
+                yield word
+
+    def get_available_models(self) -> List[Dict[str, Any]]:
+        """
+        List all available models (fake mode always shows as available)
+        """
+        available = []
+        for name, config in self.model_configs.items():
+            available.append({
+                "name": name,
+                "description": config["description"],
+                "path": os.path.join(self.model_dir, config["path"]),
+                "downloaded": True,  # Fake models are always "available"
+                "loaded": name in self.models,
+                "n_ctx": config["n_ctx"]
+            })
+        return available
+
+    def get_loaded_models(self) -> List[str]:
+        """Get list of currently loaded model names"""
+        return list(self.models.keys())
+
+    def shutdown(self):
+        """Cleanup resources (no-op for fake server)"""
+        logger.info("Shutting down FakeLocalInferenceServer...")
+        self.unload_all_models()
+        logger.info("FakeLocalInferenceServer shutdown complete")
+
+
+# Global instance - use fake or real based on environment variable
+USE_FAKE_LOCAL_LLM = os.getenv("USE_FAKE_LOCAL_LLM", "0") == "1"
+
+if USE_FAKE_LOCAL_LLM:
+    logger.info("Using FakeLocalInferenceServer (USE_FAKE_LOCAL_LLM=1)")
+    local_llm_service = FakeLocalInferenceServer()
+else:
+    local_llm_service = LocalInferenceServer()
