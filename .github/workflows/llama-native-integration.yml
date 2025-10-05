@@ -1,0 +1,131 @@
+name: Native LLM Integration (Heavy)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  native-llm-integration:
+    runs-on: ubuntu-latest
+    env:
+      # Optional sources for model artifact
+      MODEL_URL: ${{ secrets.CI_MODEL_URL }}
+      AWS_S3_BUCKET: ${{ secrets.CI_MODEL_S3_BUCKET }}
+      AWS_S3_KEY: ${{ secrets.CI_MODEL_S3_KEY }}
+      GCS_BUCKET: ${{ secrets.CI_MODEL_GCS_BUCKET }}
+      GCS_OBJECT: ${{ secrets.CI_MODEL_GCS_OBJECT }}
+      MODEL_ARTIFACT_NAME: model-gguf-artifact
+      MODEL_PATH: models/model.gguf
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install system build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libomp-dev libopenblas-dev git pkg-config
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Python dependencies (including ML reqs)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # requirements-ml.txt should include llama-cpp-python and other optional ML deps
+          if [ -f requirements-ml.txt ]; then pip install -r requirements-ml.txt; fi
+
+      - name: Obtain model artifact
+        id: get_model
+        run: |
+          set -e
+          mkdir -p models
+
+          # 1) Try direct downloadable URL
+          if [ -n "${MODEL_URL}" ]; then
+            echo "Found MODEL_URL, downloading..."
+            curl -L "$MODEL_URL" -o "$MODEL_PATH"
+            echo "model_source=url" >> $GITHUB_OUTPUT || true
+            exit 0
+          fi
+
+          # 2) Try S3 (requires AWS credentials in env)
+          if [ -n "${AWS_S3_BUCKET}" ] && [ -n "${AWS_S3_KEY}" ]; then
+            echo "Attempting to download model from s3://${AWS_S3_BUCKET}/${AWS_S3_KEY}"
+            if ! command -v aws >/dev/null 2>&1; then
+              echo "Installing AWS CLI"
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+              unzip -q awscliv2.zip
+              sudo ./aws/install || true
+            fi
+            aws s3 cp "s3://${AWS_S3_BUCKET}/${AWS_S3_KEY}" "$MODEL_PATH"
+            echo "model_source=s3" >> $GITHUB_OUTPUT || true
+            exit 0
+          fi
+
+          # 3) Try GCS (requires gcloud auth in env)
+          if [ -n "${GCS_BUCKET}" ] && [ -n "${GCS_OBJECT}" ]; then
+            echo "Attempting to download model from gs://${GCS_BUCKET}/${GCS_OBJECT}"
+            if ! command -v gsutil >/dev/null 2>&1; then
+              echo "Installing gcloud SDK"
+              sudo apt-get update && sudo apt-get install -y apt-transport-https ca-certificates gnupg
+              echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+              curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+              sudo apt-get update && sudo apt-get install -y google-cloud-sdk
+            fi
+            gsutil cp "gs://${GCS_BUCKET}/${GCS_OBJECT}" "$MODEL_PATH"
+            echo "model_source=gcs" >> $GITHUB_OUTPUT || true
+            exit 0
+          fi
+
+          # 4) Try to download model from workflow artifact of this repo (if previously uploaded)
+          echo "No external model source configured. Attempting to download workflow artifact named $MODEL_ARTIFACT_NAME"
+          mkdir -p /tmp/artifacts || true
+          # Use the GitHub Actions REST API to attempt to fetch a latest artifact - fallback if none will be handled
+          ARTIFACTS_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts"
+          TOKEN=${{ secrets.GITHUB_TOKEN }}
+          echo "Querying artifacts API"
+          curl -s -H "Authorization: token $TOKEN" "$ARTIFACTS_URL" -o /tmp/artifacts/list.json || true
+          if grep -q "${MODEL_ARTIFACT_NAME}" /tmp/artifacts/list.json >/dev/null 2>&1; then
+            echo "Found artifact ${MODEL_ARTIFACT_NAME}, attempting download"
+            # This is a best-effort attempt; more robust handling possible
+            echo "model_source=artifact" >> $GITHUB_OUTPUT || true
+            exit 0
+          fi
+
+          # If we reach here, no model source found
+          echo "No model source configured (MODEL_URL, S3, GCS, or artifact). Skipping heavy native LLM tests."
+          echo "model_source=none" >> $GITHUB_OUTPUT || true
+          exit 0
+
+      - name: Show environment and available models
+        run: |
+          echo "MODEL_PATH=${MODEL_PATH}"
+          ls -la models || true
+
+      - name: Run tests using native LLM
+        if: steps.get_model.outputs.model_source != 'none'
+        env:
+          RUN_REAL_LLAMA: '1'
+          MODEL_PATH: ${{ env.MODEL_PATH }}
+          DEMO_MODE: 'false'
+        run: |
+          pytest -q
+
+      - name: Skip heavy tests notice
+        if: steps.get_model.outputs.model_source == 'none'
+        run: |
+          echo "Skipping native LLM tests because no model source was provided. Provide CI_MODEL_URL or CI_MODEL_S3_* or CI_MODEL_GCS_* secrets to enable." 
