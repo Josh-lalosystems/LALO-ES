@@ -76,6 +76,16 @@ Or manually:
 1. Download from: https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip
 2. Extract to: `installer/windows/python-3.11.9-embed-amd64/`
 
+Alternatively, a small helper script is included to automate this step:
+
+```powershell
+# From repository root:
+cd installer\windows
+.\get_python_embeddable.ps1 -OutDir "python-3.11.9-embed-amd64"
+```
+
+This script downloads the embeddable zip, extracts it to the target folder, writes a `python311._pth` that enables `site` so pip can be used, and removes the temporary zip.
+
 ### Step 2: Prepare Python Embeddable for pip
 
 The embeddable Python doesn't include pip by default. We need to enable it:

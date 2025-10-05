@@ -222,31 +222,42 @@ Context: {json.dumps(context) if context else "None"}
         request_lower = request.lower()
 
         # Complexity indicators
+        # Check greetings first (single words or short phrases)
+        greeting_keywords = [
+            'hello', 'hi', 'hey', 'good morning', 'good afternoon',
+            'good evening', "what's up", 'greetings'
+        ]
+
         simple_keywords = [
             'what is', 'define', 'who is', 'when did', 'where is',
-            'how many', 'what does', 'meaning of'
+            'how many', 'what does', 'meaning of', 'capital of',
+            'when was', 'what time'
         ]
 
         medium_keywords = [
-            'how to', 'compare', 'explain', 'summarize', 'list',
+            'how to', 'explain', 'list',
             'describe', 'why', 'difference between'
         ]
 
         complex_keywords = [
             'design', 'analyze', 'research', 'create plan', 'optimize',
-            'develop', 'implement', 'architecture', 'strategy',
-            'investigate', 'solve', 'calculate complex'
+            'develop', 'implement', 'architecture', 'architect', 'strategy',
+            'investigate', 'solve for', 'derivative', 'integral', 'limit as',
+            'prove', 'algorithm', 'refactor', 'debug', 'write a', 'create a',
+            'explain this', 'explain how', 'implications of', 'summarize', 'compare'
         ]
 
-        # Check keywords
+        # Check keywords (check complex first, then medium, then simple, then greetings)
         if any(kw in request_lower for kw in complex_keywords):
-            base_score = 0.8
+            base_score = 0.7  # Complex path
         elif any(kw in request_lower for kw in medium_keywords):
-            base_score = 0.5
+            base_score = 0.50  # Specialized path
         elif any(kw in request_lower for kw in simple_keywords):
-            base_score = 0.2
+            base_score = 0.10  # Simple path (leave headroom for length/question factors)
+        elif any(kw in request_lower for kw in greeting_keywords):
+            base_score = 0.10  # Very simple (greetings)
         else:
-            base_score = 0.4  # Default medium
+            base_score = 0.20  # Default: simple path
 
         # Adjust based on length (longer = more complex)
         word_count = len(request.split())
@@ -280,6 +291,50 @@ Context: {json.dumps(context) if context else "None"}
         Currently wraps sync version, but can be extended to use ML models
         """
         return self.estimate_complexity_sync(request)
+
+    def classify(self, request: str, context: Optional[Dict] = None) -> Dict:
+        """
+        Synchronous classification for testing and heuristic mode
+
+        Returns same structure as route() but uses only heuristics
+        """
+        # Handle empty/whitespace-only requests
+        if not request or not request.strip():
+            return {
+                "complexity": 0.0,
+                "confidence": 0.2,  # Very low confidence for empty requests
+                "path": "simple",
+                "routing_method": "heuristic",
+                "recommended_model": "tinyllama",
+                "requires_tools": False,
+                "requires_workflow": False
+            }
+
+        complexity = self.estimate_complexity_sync(request)
+
+        # Determine path based on complexity thresholds
+        if complexity < 0.3:
+            path = "simple"
+            model = "tinyllama"
+            confidence = 0.85
+        elif complexity > 0.6:
+            path = "complex"
+            model = "tinyllama"
+            confidence = 0.7
+        else:
+            path = "specialized"
+            model = "liquid-tool"
+            confidence = 0.65
+
+        return {
+            "complexity": complexity,
+            "confidence": confidence,
+            "path": path,
+            "routing_method": "heuristic",
+            "recommended_model": model,
+            "requires_tools": self._check_tool_keywords(request),
+            "requires_workflow": complexity > 0.6
+        }
 
 
 # Global instance
