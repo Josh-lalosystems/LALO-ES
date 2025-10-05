@@ -1,3 +1,14 @@
+"""
+Copyright (c) 2025 LALO AI SYSTEMS, LLC. All rights reserved.
+
+PROPRIETARY AND CONFIDENTIAL
+
+This file is part of LALO AI Platform and is protected by copyright law.
+Unauthorized copying, modification, distribution, or use of this software,
+via any medium, is strictly prohibited without the express written permission
+of LALO AI SYSTEMS, LLC.
+"""
+
 def test_orchestrator_assign_with_and_without_permission(client):
     from tests.conftest import TEST_USER_ID
     from core.services.rbac import rbac_service

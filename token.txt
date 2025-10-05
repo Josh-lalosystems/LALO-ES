@@ -1,1 +1,11 @@
+# Copyright (c) 2025 LALO AI SYSTEMS, LLC. All rights reserved.
+#
+# PROPRIETARY AND CONFIDENTIAL
+#
+# This file is part of LALO AI Platform and is protected by copyright law.
+# Unauthorized copying, modification, distribution, or use of this software,
+# via any medium, is strictly prohibited without the express written permission
+# of LALO AI SYSTEMS, LLC.
+#
+
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZW1vLXVzZXJAZXhhbXBsZS5jb20iLCJleHAiOjE3NTk2MTg2NDF9.95tBWxxP3vFDDcZFMctalu1KUSE_FoWk94oRzo6vZA0

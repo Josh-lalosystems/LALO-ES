@@ -1,3 +1,14 @@
+"""
+Copyright (c) 2025 LALO AI SYSTEMS, LLC. All rights reserved.
+
+PROPRIETARY AND CONFIDENTIAL
+
+This file is part of LALO AI Platform and is protected by copyright law.
+Unauthorized copying, modification, distribution, or use of this software,
+via any medium, is strictly prohibited without the express written permission
+of LALO AI SYSTEMS, LLC.
+"""
+
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles

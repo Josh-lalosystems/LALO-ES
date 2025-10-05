@@ -1,4 +1,15 @@
 """
+Copyright (c) 2025 LALO AI SYSTEMS, LLC. All rights reserved.
+
+PROPRIETARY AND CONFIDENTIAL
+
+This file is part of LALO AI Platform and is protected by copyright law.
+Unauthorized copying, modification, distribution, or use of this software,
+via any medium, is strictly prohibited without the express written permission
+of LALO AI SYSTEMS, LLC.
+"""
+
+"""
 Local LLM Service - Manages local model inference using llama.cpp
 
 Handles model loading, generation, and resource management for on-premise AI.
@@ -39,25 +50,73 @@ class LocalInferenceServer:
         self.model_dir = model_dir
         self.models: Dict[str, Any] = {}  # Loaded model instances
         self.model_configs = {
-            # Models optimized for 8GB RAM CPU-only
-            "qwen-0.5b": {
-                "path": "qwen-0.5b/qwen2.5-0.5b-instruct-q4_k_m.gguf",
-                "n_ctx": 2048,
-                "n_threads": 2,
-                "description": "Fast confidence scoring & validation"
-            },
-            "tinyllama": {
-                "path": "tinyllama/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
-                "n_ctx": 2048,
-                "n_threads": 4,
-                "description": "General purpose chat"
-            },
+            # ===== ROUTING & ORCHESTRATION =====
             "liquid-tool": {
                 "path": "liquid-tool/Liquid-1.2B-Tool-Q4_K_M.gguf",
                 "n_ctx": 2048,
                 "n_threads": 4,
-                "description": "Function calling & routing"
-            }
+                "description": "Function calling, tool use, and request routing",
+                "specialty": "routing",
+                "priority": 1
+            },
+
+            # ===== MATH & FINANCE =====
+            "deepseek-math": {
+                "path": "deepseek-math/deepseek-math-7b-instruct.Q4_K_M.gguf",
+                "n_ctx": 4096,
+                "n_threads": 6,
+                "description": "Mathematical reasoning, finance calculations, quantitative analysis",
+                "specialty": "math",
+                "priority": 1
+            },
+
+            # ===== CODE GENERATION =====
+            "deepseek-coder": {
+                "path": "deepseek-coder/deepseek-coder-6.7b-instruct.Q4_K_M.gguf",
+                "n_ctx": 4096,
+                "n_threads": 6,
+                "description": "Code generation, debugging, refactoring (Python, JS, Java, etc.)",
+                "specialty": "coding",
+                "priority": 1
+            },
+
+            # ===== RESEARCH & ANALYSIS =====
+            "openchat": {
+                "path": "openchat/openchat-3.5-0106.Q4_K_M.gguf",
+                "n_ctx": 4096,
+                "n_threads": 6,
+                "description": "Research synthesis, analysis, business intelligence",
+                "specialty": "research",
+                "priority": 1
+            },
+            "mistral-instruct": {
+                "path": "mistral-instruct/mistral-7b-instruct-v0.2.Q4_K_M.gguf",
+                "n_ctx": 4096,
+                "n_threads": 6,
+                "description": "General reasoning, analysis, report generation",
+                "specialty": "research",
+                "priority": 1
+            },
+
+            # ===== GENERAL PURPOSE =====
+            "tinyllama": {
+                "path": "tinyllama/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+                "n_ctx": 2048,
+                "n_threads": 4,
+                "description": "Fast general-purpose chat, quick responses",
+                "specialty": "general",
+                "priority": 1
+            },
+
+            # ===== VALIDATION & CONFIDENCE =====
+            "qwen-0.5b": {
+                "path": "qwen-0.5b/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+                "n_ctx": 2048,
+                "n_threads": 2,
+                "description": "Ultra-fast confidence scoring and validation",
+                "specialty": "validation",
+                "priority": 1
+            },
         }
 
         # Thread pool for async execution (llama.cpp is blocking)

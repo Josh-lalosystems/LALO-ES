@@ -34,3 +34,20 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
+
+# Models / large ML artifacts (don't commit real model binaries)
+models/
+# model files
+*.gguf
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.onnx
+*.tflite
+*.h5
+*.model
+*.weights
+*.tar.gz
+*.zip

@@ -1,3 +1,13 @@
+# Copyright (c) 2025 LALO AI SYSTEMS, LLC. All rights reserved.
+#
+# PROPRIETARY AND CONFIDENTIAL
+#
+# This file is part of LALO AI Platform and is protected by copyright law.
+# Unauthorized copying, modification, distribution, or use of this software,
+# via any medium, is strictly prohibited without the express written permission
+# of LALO AI SYSTEMS, LLC.
+#
+
 # LALO AI - Functional MVP Implementation Plan
 **Status**: Current system has cosmetic UI but lacks core enterprise functionality
 **Goal**: Build a working enterprise AI platform with full LALO workflow, tools, security, and governance
