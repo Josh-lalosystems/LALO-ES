@@ -1,0 +1,12 @@
+Package: intuit-oauth
+Requirement: intuit-oauth>=1.2.0
+Summary: Intuit OAuth Client
+Home: https://github.com/intuit/oauth-pythonclient
+Project URLs: {"Homepage": "https://github.com/intuit/oauth-pythonclient"}
+
+# LICENSE TEXT NOT FOUND AUTOMATICALLY
+# Please fetch the license text manually and place it here if required for redistribution.
+# Tried sources:
+#  - https://github.com/intuit/oauth-pythonclient
+#  - https://github.com/intuit/oauth-pythonclient
+#  - https://pypi.org/project/intuit-oauth/#files

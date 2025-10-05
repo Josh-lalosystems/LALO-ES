@@ -1,0 +1,28 @@
+Package: python-multipart
+Requirement: python-multipart>=0.0.6
+Summary: A streaming multipart parser for Python
+Home: 
+Project URLs: {"Changelog": "https://github.com/Kludex/python-multipart/blob/master/CHANGELOG.md", "Documentation": "https://kludex.github.io/python-multipart/", "Homepage": "https://github.com/Kludex/python-multipart", "Source": "https://github.com/Kludex/python-multipart"}
+Classifiers:
+ - Development Status :: 5 - Production/Stable
+ - Environment :: Web Environment
+ - Intended Audience :: Developers
+ - License :: OSI Approved :: Apache Software License
+ - Operating System :: OS Independent
+ - Programming Language :: Python :: 3
+ - Programming Language :: Python :: 3 :: Only
+ - Programming Language :: Python :: 3.10
+ - Programming Language :: Python :: 3.11
+ - Programming Language :: Python :: 3.12
+ - Programming Language :: Python :: 3.8
+ - Programming Language :: Python :: 3.9
+ - Topic :: Software Development :: Libraries :: Python Modules
+
+# LICENSE TEXT NOT FOUND AUTOMATICALLY
+# Please fetch the license text manually and place it here if required for redistribution.
+# Tried sources:
+#  - https://github.com/Kludex/python-multipart/blob/master/CHANGELOG.md
+#  - https://kludex.github.io/python-multipart/
+#  - https://github.com/Kludex/python-multipart
+#  - https://github.com/Kludex/python-multipart
+#  - https://pypi.org/project/python-multipart/#files

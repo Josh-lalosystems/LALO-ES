@@ -1,0 +1,25 @@
+Package: PyJWT
+Requirement: PyJWT>=2.8.0,<3.0.0
+Summary: JSON Web Token implementation in Python
+Home: 
+Project URLs: {"Homepage": "https://github.com/jpadilla/pyjwt"}
+Classifiers:
+ - Development Status :: 5 - Production/Stable
+ - Intended Audience :: Developers
+ - License :: OSI Approved :: MIT License
+ - Natural Language :: English
+ - Programming Language :: Python
+ - Programming Language :: Python :: 3
+ - Programming Language :: Python :: 3 :: Only
+ - Programming Language :: Python :: 3.10
+ - Programming Language :: Python :: 3.11
+ - Programming Language :: Python :: 3.12
+ - Programming Language :: Python :: 3.13
+ - Programming Language :: Python :: 3.9
+ - Topic :: Utilities
+
+# LICENSE TEXT NOT FOUND AUTOMATICALLY
+# Please fetch the license text manually and place it here if required for redistribution.
+# Tried sources:
+#  - https://github.com/jpadilla/pyjwt
+#  - https://pypi.org/project/PyJWT/#files

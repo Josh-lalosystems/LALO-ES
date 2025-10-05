@@ -1,0 +1,34 @@
+Package: pytest
+Requirement: pytest>=7.4.0
+Summary: pytest: simple powerful testing with Python
+Home: 
+Project URLs: {"Changelog": "https://docs.pytest.org/en/stable/changelog.html", "Contact": "https://docs.pytest.org/en/stable/contact.html", "Funding": "https://docs.pytest.org/en/stable/sponsor.html", "Homepage": "https://docs.pytest.org/en/latest/", "Source": "https://github.com/pytest-dev/pytest", "Tracker": "https://github.com/pytest-dev/pytest/issues"}
+Classifiers:
+ - Development Status :: 6 - Mature
+ - Intended Audience :: Developers
+ - License :: OSI Approved :: MIT License
+ - Operating System :: MacOS
+ - Operating System :: Microsoft :: Windows
+ - Operating System :: POSIX
+ - Operating System :: Unix
+ - Programming Language :: Python :: 3 :: Only
+ - Programming Language :: Python :: 3.10
+ - Programming Language :: Python :: 3.11
+ - Programming Language :: Python :: 3.12
+ - Programming Language :: Python :: 3.13
+ - Programming Language :: Python :: 3.14
+ - Programming Language :: Python :: 3.9
+ - Topic :: Software Development :: Libraries
+ - Topic :: Software Development :: Testing
+ - Topic :: Utilities
+
+# LICENSE TEXT NOT FOUND AUTOMATICALLY
+# Please fetch the license text manually and place it here if required for redistribution.
+# Tried sources:
+#  - https://docs.pytest.org/en/stable/changelog.html
+#  - https://docs.pytest.org/en/stable/contact.html
+#  - https://docs.pytest.org/en/stable/sponsor.html
+#  - https://docs.pytest.org/en/latest/
+#  - https://github.com/pytest-dev/pytest
+#  - https://github.com/pytest-dev/pytest/issues
+#  - https://pypi.org/project/pytest/#files

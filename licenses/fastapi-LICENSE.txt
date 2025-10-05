@@ -1,0 +1,45 @@
+Package: fastapi
+Requirement: fastapi>=0.95.0
+Summary: FastAPI framework, high performance, easy to learn, fast to code, ready for production
+Home: 
+Project URLs: {"Changelog": "https://fastapi.tiangolo.com/release-notes/", "Documentation": "https://fastapi.tiangolo.com/", "Homepage": "https://github.com/fastapi/fastapi", "Issues": "https://github.com/fastapi/fastapi/issues", "Repository": "https://github.com/fastapi/fastapi"}
+Classifiers:
+ - Development Status :: 4 - Beta
+ - Environment :: Web Environment
+ - Framework :: AsyncIO
+ - Framework :: FastAPI
+ - Framework :: Pydantic
+ - Framework :: Pydantic :: 1
+ - Framework :: Pydantic :: 2
+ - Intended Audience :: Developers
+ - Intended Audience :: Information Technology
+ - Intended Audience :: System Administrators
+ - License :: OSI Approved :: MIT License
+ - Operating System :: OS Independent
+ - Programming Language :: Python
+ - Programming Language :: Python :: 3
+ - Programming Language :: Python :: 3 :: Only
+ - Programming Language :: Python :: 3.10
+ - Programming Language :: Python :: 3.11
+ - Programming Language :: Python :: 3.12
+ - Programming Language :: Python :: 3.13
+ - Programming Language :: Python :: 3.8
+ - Programming Language :: Python :: 3.9
+ - Topic :: Internet
+ - Topic :: Internet :: WWW/HTTP
+ - Topic :: Internet :: WWW/HTTP :: HTTP Servers
+ - Topic :: Software Development
+ - Topic :: Software Development :: Libraries
+ - Topic :: Software Development :: Libraries :: Application Frameworks
+ - Topic :: Software Development :: Libraries :: Python Modules
+ - Typing :: Typed
+
+# LICENSE TEXT NOT FOUND AUTOMATICALLY
+# Please fetch the license text manually and place it here if required for redistribution.
+# Tried sources:
+#  - https://fastapi.tiangolo.com/release-notes/
+#  - https://fastapi.tiangolo.com/
+#  - https://github.com/fastapi/fastapi
+#  - https://github.com/fastapi/fastapi/issues
+#  - https://github.com/fastapi/fastapi
+#  - https://pypi.org/project/fastapi/#files
