@@ -22,6 +22,8 @@ import json
 from ..services.key_management import key_manager, APIKeyRequest
 import os
 from ..services.ai_service import ai_service
+from ..services.unified_request_handler import unified_request_handler
+from ..services.local_llm_service import local_llm_service
 from ..services.auth import get_current_user
 from ..services.database_service import database_service
 from ..services.pricing import calculate_cost, estimate_tokens
@@ -184,34 +186,30 @@ async def send_ai_request(
             confidence=None,
         )
 
-    # Initialize models using only providers that validated as working
+    # Initialize models using only providers that validated as working (best-effort)
     try:
-        # Only pass working providers into initialization to avoid spurious failures
         ai_service.initialize_user_models(current_user, api_keys, working_keys=working_keys)
     except Exception as e:
         logger.warning("Failed to initialize models for %s: %s", current_user, e)
-        # Don't fail hard here if models can't be fully initialized; let subsequent checks surface problems
 
-    # Get available models and select one
-    available = ai_service.get_available_models(current_user)
-    logger.debug("available models for %s: %s", current_user, available)
-    model = request.model or (available[0] if available else None)
+    # Get available models from cloud APIs
+    cloud_models = ai_service.get_available_models(current_user)
 
-    if not available:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No models available. Please add API keys in Settings.")
+    # Add local models if local inference is available
+    available_local_models = list(local_llm_service.model_configs.keys()) if local_llm_service.is_available() else []
 
-    if not model or model not in available:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Model '{model}' not available. Available models: {', '.join(available)}")
+    # Combine cloud and local models
+    available = cloud_models + available_local_models
+    logger.debug("available models for %s: cloud=%s, local=%s", current_user, cloud_models, available_local_models)
 
-    # Generate response with timeout protection
     try:
-        generated = await asyncio.wait_for(
-            ai_service.generate(
-                request.prompt,
-                model_name=model,
+        handler_response = await asyncio.wait_for(
+            unified_request_handler.handle_request(
+                user_request=request.prompt,
                 user_id=current_user,
-                max_tokens=request.max_tokens,
-                temperature=request.temperature,
+                available_models=available,
+                context=None,
+                stream=False,
             ),
             timeout=60.0
         )
@@ -220,8 +218,9 @@ async def send_ai_request(
     except Exception as e:
         error_msg = str(e)
         import traceback
-        logger.error("Exception during generate (%s): %s", type(e).__name__, error_msg)
+        logger.error("Exception during unified handler (%s): %s", type(e).__name__, error_msg)
         logger.debug(traceback.format_exc())
+        # Map common errors to HTTP responses
         if "api key" in error_msg.lower():
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"API key authentication failed: {error_msg}")
         elif "rate limit" in error_msg.lower():
@@ -230,6 +229,10 @@ async def send_ai_request(
             raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="API quota exceeded. Please check your provider account.")
         else:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"AI generation failed: {error_msg}")
+
+    # Handler response should be a dict matching the unified handler contract
+    generated = handler_response.get("response", "")
+    model = handler_response.get("model", handler_response.get("models_used", available[0] if available else "unknown"))
 
     # Calculate token usage and cost
     prompt_tokens = estimate_tokens(request.prompt)
@@ -289,6 +292,74 @@ async def send_ai_request(
         interpretation=interpretation,
         confidence=confidence_payload,
     )
+
+
+@router.post("/ai/chat/stream")
+async def stream_ai_chat(
+    request: AIRequest,
+    current_user: str = Depends(get_current_user)
+) -> StreamingResponse:
+    """Stream AI responses (SSE) when local streaming is available; otherwise fallback to full response."""
+    logger.debug("stream_ai_chat called for user=%s model=%s", current_user, request.model)
+
+    # Determine routing decision first
+    try:
+        routing_decision = await router_model.route(request.prompt)
+    except Exception as e:
+        logger.warning(f"Router failed for stream: {e}")
+        routing_decision = {"path": "simple", "recommended_model": "tinyllama"}
+
+    # Determine model to stream from
+    available = ai_service.get_available_models(current_user)
+    model_name = routing_decision.get("recommended_model") or (available[0] if available else "tinyllama")
+
+    async def event_stream():
+        # Send routing info first
+        yield f"data: {json.dumps({'type': 'routing', 'content': routing_decision})}\n\n"
+
+        # If local inference supports streaming, stream tokens
+        if local_llm_service.is_available():
+            try:
+                async for chunk in local_llm_service.generate_stream(
+                    prompt=request.prompt,
+                    model_name=model_name,
+                    max_tokens=request.max_tokens,
+                    temperature=request.temperature,
+                ):
+                    # Each chunk may be partial text; send as token event
+                    yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
+            except Exception as e:
+                logger.error("Streaming generation failed: %s", e)
+                yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+                # Fallback: return non-streamed full response
+                try:
+                    fallback = await unified_request_handler.handle_request(
+                        user_request=request.prompt,
+                        user_id=current_user,
+                        available_models=available,
+                        stream=False,
+                    )
+                    yield f"data: {json.dumps({'type': 'done', 'content': fallback.get('response')})}\n\n"
+                except Exception as e2:
+                    yield f"data: {json.dumps({'type': 'error', 'content': str(e2)})}\n\n"
+                return
+        else:
+            # No local streaming: produce full response via unified handler
+            try:
+                full = await unified_request_handler.handle_request(
+                    user_request=request.prompt,
+                    user_id=current_user,
+                    available_models=available,
+                    stream=False,
+                )
+                yield f"data: {json.dumps({'type': 'done', 'content': full.get('response')})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+
+        # Final done event
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 @router.get("/ai/history")
 async def get_request_history(

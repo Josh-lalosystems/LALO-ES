@@ -191,7 +191,26 @@ class UnifiedRequestHandler:
         # For now, treat specialized same as simple
         # In future, can add routing to specific tools based on request type
 
-        logger.info("Executing specialized request (using simple path for now)")
+        logger.info("Executing specialized request")
+
+        # If router provided a detailed action plan or required models, prefer the orchestrator
+        required = routing_decision.get("required_models", [])
+        action_plan = routing_decision.get("action_plan", [])
+
+        # If there's an action plan or multiple required models, use complex execution to coordinate
+        if action_plan or (required and len(required) > 1):
+            logger.info("Specialized request requires multi-model orchestration; delegating to orchestrator")
+            return await self.orchestrator.execute_complex_request(
+                user_request=user_request,
+                routing_decision=routing_decision,
+                user_id=user_id,
+                available_models=available_models,
+                stream=False
+            )
+
+        # Otherwise, pick the recommended model (or first available) and call simple execution
+        model = routing_decision.get("recommended_model") or (available_models[0] if available_models else "tinyllama")
+        routing_decision["recommended_model"] = model
 
         return await self.orchestrator.execute_simple_request(
             user_request=user_request,

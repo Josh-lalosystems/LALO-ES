@@ -38,7 +38,8 @@ class RouterModel:
     """
 
     def __init__(self):
-        self.model_name = "liquid-tool"  # Fast 1.2B model for routing
+        # Prefer phi-2 as the routing model (replacement for liquid-tool)
+        self.model_name = "phi-2"
         self.server = local_llm_service
         self.fallback_enabled = True
         logger.info("RouterModel initialized")
@@ -171,6 +172,9 @@ Context: {json.dumps(context) if context else "None"}
         decision.setdefault("recommended_model", "tinyllama")
         decision.setdefault("requires_tools", False)
         decision.setdefault("requires_workflow", False)
+        # Allow routers to propose required specialized models and an action plan
+        decision.setdefault("required_models", [])
+        decision.setdefault("action_plan", [])
 
         # Normalize values
         decision["complexity"] = max(0.0, min(1.0, float(decision["complexity"])))
@@ -210,7 +214,9 @@ Context: {json.dumps(context) if context else "None"}
             "reasoning": "Heuristic-based routing (model unavailable)",
             "recommended_model": model,
             "requires_tools": self._check_tool_keywords(request),
-            "requires_workflow": complexity > 0.6
+            "requires_workflow": complexity > 0.6,
+            "required_models": [model] if path == "specialized" else [],
+            "action_plan": []
         }
 
     def estimate_complexity_sync(self, request: str) -> float:

@@ -61,6 +61,7 @@ from datetime import datetime
 from core.services.router_model import router_model
 from core.services.local_llm_service import local_llm_service
 from core.services.confidence_model import confidence_model
+from core.services.tool_executor import tool_executor
 
 logger = logging.getLogger(__name__)
 
@@ -342,13 +343,46 @@ Routing Info: Complexity={routing_decision.get('complexity', 0.5):.2f}, Path={ro
                             workflow.steps[str(step_id)].complete(output)
 
                 else:
-                    # For other actions (search, extract, etc.), implement later
-                    logger.warning(f"Action '{action}' not yet implemented, skipping")
-                    results[step_id] = {
-                        "output": f"(Action {action} pending implementation)",
-                        "model": model,
-                        "action": action
-                    }
+                    # For other actions (search, extract, code_exec, etc.), delegate to tool_executor where possible
+                    logger.info(f"Executing tool action '{action}' via tool_executor")
+                    try:
+                        if any(k in action.lower() for k in ["search", "find", "look up", "web"]):
+                            tool_res = await tool_executor.execute_step(
+                                step={"action": action, "tool": "web_search"},
+                                user_id=user_id,
+                                workflow_session_id=(workflow_id or f"wf_{uuid4().hex[:8]}")
+                            )
+                            results[step_id] = {
+                                "output": tool_res.tool_output if tool_res else "",
+                                "model": "tool:web_search",
+                                "action": action
+                            }
+                        elif any(k in action.lower() for k in ["code", "execute", "run", "python"]):
+                            tool_res = await tool_executor.execute_step(
+                                step={"action": action, "tool": "code_executor"},
+                                user_id=user_id,
+                                workflow_session_id=(workflow_id or f"wf_{uuid4().hex[:8]}")
+                            )
+                            results[step_id] = {
+                                "output": tool_res.tool_output if tool_res else "",
+                                "model": "tool:code_executor",
+                                "action": action
+                            }
+                        else:
+                            logger.warning(f"Action '{action}' not recognized by tool_executor, skipping")
+                            results[step_id] = {
+                                "output": f"(Action {action} pending implementation)",
+                                "model": model,
+                                "action": action
+                            }
+                    except Exception as e:
+                        logger.error(f"Tool execution failed for step {step_id}: {e}")
+                        results[step_id] = {
+                            "output": f"(Error executing tool: {e})",
+                            "model": model,
+                            "action": action,
+                            "error": str(e)
+                        }
 
             except Exception as e:
                 logger.error(f"Step {step_id} failed: {e}")

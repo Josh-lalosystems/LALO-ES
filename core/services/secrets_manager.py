@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 import os
 import json
 from cryptography.fernet import Fernet
+from cryptography.fernet import InvalidToken
 
 from ..database import SessionLocal, engine
 
@@ -74,7 +75,15 @@ class SecretsManager:
         return fernet.encrypt(value.encode()).decode()
 
     def _decrypt(self, value_encrypted: str) -> str:
-        return fernet.decrypt(value_encrypted.encode()).decode()
+        try:
+            return fernet.decrypt(value_encrypted.encode()).decode()
+        except InvalidToken:
+            # Do not raise; return None to indicate decryption failed (likely key mismatch)
+            # Callers should treat this as 'secret not available'
+            # Log a warning for ops/debugging
+            import logging
+            logging.getLogger(__name__).warning("Failed to decrypt secret: Invalid encryption key or corrupted data")
+            return None
 
     def set_secret(self, name: str, value: str, user_id: Optional[str] = None) -> Dict:
         """Create or update a secret. Returns metadata (no plaintext)."""
