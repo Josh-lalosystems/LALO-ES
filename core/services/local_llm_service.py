@@ -121,8 +121,8 @@ class LocalInferenceServer:
             # ===== VALIDATION & CONFIDENCE =====
             "qwen-0.5b": {
                 "path": "qwen-0.5b/qwen2.5-0.5b-instruct-q4_k_m.gguf",
-                "n_ctx": 2048,
-                "n_threads": 2,
+                "n_ctx": 512,  # Small context for fast loading (0.8s tested)
+                "n_threads": 4,  # Optimal for most CPUs
                 "description": "Ultra-fast confidence scoring and validation",
                 "specialty": "validation",
                 "priority": 1
