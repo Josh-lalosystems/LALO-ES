@@ -20,6 +20,7 @@ class StorageService:
         connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
         self.blob_service_client = BlobServiceClient.from_connection_string(connection_string)
         self.container_name = "documents"
+        self.dead_letter_container = "dead_letters"
         
     async def store_document(self, document: Document) -> StorageResult:
         try:
@@ -58,6 +59,39 @@ class StorageService:
                 location="",
                 errors=[str(e)]
             )
+
+    async def store_dead_letter(self, job_id: str, job: dict) -> bool:
+        """Persist a dead-letter job as JSON into the dead_letters container."""
+        try:
+            container_client = self.blob_service_client.get_container_client(self.dead_letter_container)
+            try:
+                container_client.create_container()
+            except Exception:
+                # container may already exist
+                pass
+
+            blob_name = f"{job_id}.json"
+            blob_client = container_client.get_blob_client(blob_name)
+            blob_client.upload_blob(json.dumps(job), overwrite=True)
+            return True
+        except Exception:
+            return False
+
+    async def list_dead_letters(self) -> list:
+        try:
+            container_client = self.blob_service_client.get_container_client(self.dead_letter_container)
+            blobs = container_client.list_blobs()
+            results = []
+            for b in blobs:
+                blob_client = container_client.get_blob_client(b.name)
+                content = blob_client.download_blob().readall()
+                try:
+                    results.append(json.loads(content))
+                except Exception:
+                    results.append({"name": b.name})
+            return results
+        except Exception:
+            return []
     
     async def retrieve_document(self, doc_id: str) -> Optional[Document]:
         try:

@@ -56,11 +56,21 @@ async def _worker():
     store = None
     # optional storage service to persist dead letters
     storage_service = None
+    db_session_factory = None
+    DeadLetterModel = None
     try:
         from services.document_service.services.storage import StorageService
         storage_service = StorageService()
     except Exception:
         storage_service = None
+    try:
+        # Try to import DB session and model
+        from core.database import SessionLocal, DeadLetter
+        db_session_factory = SessionLocal
+        DeadLetterModel = DeadLetter
+    except Exception:
+        db_session_factory = None
+        DeadLetterModel = None
 
     while True:
         try:
@@ -106,11 +116,33 @@ async def _worker():
                     job['error'] = str(e)
                     job['failed_at'] = datetime.utcnow().isoformat()
                     _DEAD_LETTER.append(job)
-                    # persist dead-letter if storage service available
-                    if storage_service is not None:
+                    # persist dead-letter to DB if available
+                    try:
                         import hashlib, json
-                        job_id = hashlib.sha256(json.dumps(job).encode()).hexdigest()
-                        await storage_service.store_dead_letter(job_id, job)
+                        job_id = hashlib.sha256(json.dumps(job, sort_keys=True).encode()).hexdigest()
+                        if db_session_factory is not None and DeadLetterModel is not None:
+                            db = db_session_factory()
+                            try:
+                                dl = DeadLetterModel(
+                                    id=job_id,
+                                    job_hash=job_id,
+                                    documents=job.get('documents'),
+                                    ids=job.get('ids'),
+                                    metadatas=job.get('metadatas'),
+                                    attempts=job.get('attempts', 0),
+                                    error=job.get('error'),
+                                    enqueued_at=job.get('enqueued_at'),
+                                    failed_at=job.get('failed_at')
+                                )
+                                db.add(dl)
+                                db.commit()
+                            finally:
+                                db.close()
+                        elif storage_service is not None:
+                            job_id = hashlib.sha256(json.dumps(job).encode()).hexdigest()
+                            await storage_service.store_dead_letter(job_id, job)
+                    except Exception:
+                        logger.exception("Failed to persist dead letter to DB or storage")
                 else:
                     # Exponential backoff and re-enqueue
                     await asyncio.sleep(RETRY_DELAY * attempts)

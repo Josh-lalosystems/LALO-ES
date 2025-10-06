@@ -12,6 +12,7 @@ of LALO AI SYSTEMS, LLC.
 from typing import Dict, Any
 import openpyxl
 from models import Document, ProcessingResult
+from ..table_extractor import excel_tables_to_chunks
 
 class ExcelProcessor:
     async def process(self, document: Document) -> ProcessingResult:
@@ -49,7 +50,17 @@ class ExcelProcessor:
             
             # Update document metadata
             document.metadata.update(metadata)
-            
+
+            # Attempt to extract tables as chunks
+            try:
+                table_chunks = excel_tables_to_chunks(workbook, doc_id=document.id)
+                # merge with any existing chunks
+                existing = document.metadata.get('chunks', [])
+                document.metadata['chunks'] = existing + table_chunks
+            except Exception:
+                # non-fatal
+                document.metadata['chunks'] = document.metadata.get('chunks', [])
+
             return ProcessingResult(
                 success=True,
                 document_id=document.id,

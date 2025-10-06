@@ -27,6 +27,9 @@ from models import (
 from services.document_processor import DocumentProcessor
 from services.storage import StorageService
 from services.auth import get_current_user
+from services.document_service.services.background_indexer import list_dead_letter, enqueue_index_job
+from core.database import SessionLocal
+from core.database import DeadLetter as DeadLetterModel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -146,6 +149,81 @@ async def update_document(
             
     except Exception as e:
         logger.error(f"Error updating document: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/admin/dead_letters")
+async def get_dead_letters(current_user: str = Depends(get_current_user)):
+    # Only allow admin users in production — for demo, allow any authenticated user
+    try:
+        # First, try DB persisted dead letters
+        db = SessionLocal()
+        try:
+            rows = db.query(DeadLetterModel).order_by(DeadLetterModel.created_at.desc()).limit(100).all()
+            db_dead = [r.to_dict() for r in rows]
+        finally:
+            db.close()
+
+        # Also include in-memory
+        inmem = list_dead_letter()
+
+        # Also include blob storage persisted (legacy)
+        storage = StorageService()
+        persisted = await storage.list_dead_letters()
+        return {"db": db_dead, "in_memory": inmem, "persisted": persisted}
+    except Exception as e:
+        logger.exception("Failed to list dead letters: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/admin/requeue_dead_letter/{job_hash}")
+async def requeue_dead_letter(job_hash: str, current_user: str = Depends(get_current_user)):
+    # For persisted dead letters, find by blob name (or job content hash)
+    try:
+        # First, try DB persisted dead letters
+        db = SessionLocal()
+        try:
+            row = db.query(DeadLetterModel).filter(DeadLetterModel.job_hash == job_hash).first()
+            if row:
+                jd = row.to_dict()
+                enqueue_index_job(jd.get('documents', []), jd.get('ids', []), jd.get('metadatas', []))
+                # Optionally delete the DB record after requeue
+                try:
+                    db.delete(row)
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                return {"requeued": True}
+        finally:
+            db.close()
+
+        # Fallback: persisted blob storage
+        storage = StorageService()
+        persisted = await storage.list_dead_letters()
+        for job in persisted:
+            # job might be a dict; compute hash to compare
+            import hashlib, json
+            content = json.dumps(job, sort_keys=True)
+            h = hashlib.sha256(content.encode()).hexdigest()
+            if h == job_hash:
+                # requeue
+                enqueue_index_job(job.get('documents', []), job.get('ids', []), job.get('metadatas', []))
+                return {"requeued": True}
+
+        # fallback: look in-memory
+        for job in list_dead_letter():
+            import hashlib, json
+            content = json.dumps(job, sort_keys=True)
+            h = hashlib.sha256(content.encode()).hexdigest()
+            if h == job_hash:
+                enqueue_index_job(job.get('documents', []), job.get('ids', []), job.get('metadatas', []))
+                return {"requeued": True}
+
+        raise HTTPException(status_code=404, detail="Dead-letter job not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to requeue dead letter: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ from typing import Dict, Any
 from io import BytesIO
 import PyPDF2
 from models import Document, ProcessingResult
+from ..chunker import chunk_text_hierarchical
 
 class PDFProcessor:
     async def process(self, document: Document) -> ProcessingResult:
@@ -40,14 +41,33 @@ class PDFProcessor:
             
             # Extract page information
             metadata["page_info"] = []
+            page_texts = []
             for i, page in enumerate(pdf.pages):
-                page_info = {
-                    "page_number": i + 1,
-                    "size": page.mediabox.upper_right,
-                    "rotation": page.get('/Rotate', 0),
-                    "has_images": len(page.images) > 0
-                }
-                metadata["page_info"].append(page_info)
+                try:
+                    page_info = {
+                        "page_number": i + 1,
+                        "size": page.mediabox.upper_right,
+                        "rotation": page.get('/Rotate', 0),
+                        "has_images": len(page.images) > 0
+                    }
+                    metadata["page_info"].append(page_info)
+                    # Collect text for chunking (limit to first 50 pages to avoid huge memory)
+                    if i < 50:
+                        try:
+                            page_texts.append(page.extract_text() or "")
+                        except Exception:
+                            page_texts.append("")
+                except Exception:
+                    # best-effort; continue
+                    continue
+
+            # Chunk the collected text
+            try:
+                full_text = "\n\n".join(page_texts)
+                chunks = chunk_text_hierarchical(full_text, doc_id=document.id)
+                document.metadata['chunks'] = chunks
+            except Exception:
+                document.metadata['chunks'] = []
             
             # Update document metadata
             document.metadata.update(metadata)

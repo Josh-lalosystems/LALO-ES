@@ -341,6 +341,39 @@ class FeedbackEvent(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class DeadLetter(Base):
+    """
+    Dead-letter queue persistence for failed indexing jobs.
+    Stores the original job payload so operators can inspect and requeue.
+    """
+    __tablename__ = "dead_letters"
+
+    id = Column(String, primary_key=True)
+    job_hash = Column(String, index=True, nullable=False)
+    documents = Column(JSON, nullable=True)
+    ids = Column(JSON, nullable=True)
+    metadatas = Column(JSON, nullable=True)
+    attempts = Column(Integer, default=0)
+    error = Column(String, nullable=True)
+    enqueued_at = Column(DateTime, nullable=True)
+    failed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "job_hash": self.job_hash,
+            "documents": self.documents,
+            "ids": self.ids,
+            "metadatas": self.metadatas,
+            "attempts": self.attempts,
+            "error": self.error,
+            "enqueued_at": self.enqueued_at.isoformat() if self.enqueued_at else None,
+            "failed_at": self.failed_at.isoformat() if self.failed_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 # Create all tables
 Base.metadata.create_all(bind=engine)
 

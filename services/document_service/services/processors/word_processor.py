@@ -13,6 +13,8 @@ from typing import Dict, Any
 from io import BytesIO
 from docx import Document as DocxDocument
 from models import Document, ProcessingResult
+from ..chunker import chunk_text_hierarchical
+from ..table_extractor import word_table_to_chunks
 
 class WordProcessor:
     async def process(self, document: Document) -> ProcessingResult:
@@ -47,6 +49,20 @@ class WordProcessor:
             
             # Update document metadata
             document.metadata.update(metadata)
+
+            # Build text and chunk it
+            try:
+                paragraphs = [p.text for p in doc.paragraphs if p.text]
+                full_text = "\n\n".join(paragraphs)
+                chunks = chunk_text_hierarchical(full_text, doc_id=document.id)
+                # Also extract tables into chunks
+                try:
+                    table_chunks = word_table_to_chunks(doc.tables, doc_id=document.id)
+                    document.metadata['chunks'] = chunks + table_chunks
+                except Exception:
+                    document.metadata['chunks'] = chunks
+            except Exception:
+                document.metadata['chunks'] = []
             
             return ProcessingResult(
                 success=True,
