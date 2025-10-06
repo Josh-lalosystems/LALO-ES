@@ -10,7 +10,7 @@ of LALO AI SYSTEMS, LLC.
 """
 
 import magic
-from models import Document, ProcessingResult
+from ...models import Document, ProcessingResult
 
 class DefaultProcessor:
     async def process(self, document: Document) -> ProcessingResult:

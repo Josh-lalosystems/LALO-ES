@@ -12,7 +12,7 @@ of LALO AI SYSTEMS, LLC.
 from typing import Dict, Any
 from io import BytesIO
 import PyPDF2
-from models import Document, ProcessingResult
+from ...models import Document, ProcessingResult
 from ..chunker import chunk_text_hierarchical
 
 class PDFProcessor:

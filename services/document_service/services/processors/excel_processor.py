@@ -11,7 +11,7 @@ of LALO AI SYSTEMS, LLC.
 
 from typing import Dict, Any
 import openpyxl
-from models import Document, ProcessingResult
+from ...models import Document, ProcessingResult
 from ..table_extractor import excel_tables_to_chunks
 
 class ExcelProcessor:

@@ -12,7 +12,7 @@ of LALO AI SYSTEMS, LLC.
 from typing import Dict, Any
 from io import BytesIO
 from docx import Document as DocxDocument
-from models import Document, ProcessingResult
+from ...models import Document, ProcessingResult
 from ..chunker import chunk_text_hierarchical
 from ..table_extractor import word_table_to_chunks
 

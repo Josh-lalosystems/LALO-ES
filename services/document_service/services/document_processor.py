@@ -10,7 +10,7 @@ of LALO AI SYSTEMS, LLC.
 """
 
 from typing import Optional, List
-from models import Document, DocumentType, ProcessingResult
+from ..models import Document, DocumentType, ProcessingResult
 from .processors import (
     ExcelProcessor,
     WordProcessor,
@@ -18,7 +18,7 @@ from .processors import (
     DefaultProcessor
 )
 from .quality import score_document
-from services.document_service.services.background_indexer import enqueue_index_job
+from .background_indexer import enqueue_index_job
 import os
 from core.vectorstores import get_vector_store
 
