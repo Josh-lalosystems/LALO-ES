@@ -66,7 +66,12 @@ class KeyManager:
             record = db.query(APIKeys).filter(APIKeys.user_id == user_id).first()
             if not record:
                 return {}
-            return record.keys
+            try:
+                return record.keys
+            except Exception as e:
+                # If decryption fails (e.g., encryption key changed), return empty dict
+                logger.warning(f"Failed to decrypt keys for {user_id}: {e}")
+                return {}
     
     def set_keys(self, user_id: str, keys: APIKeyRequest):
         """Store or update API keys for a user in secrets store and keep legacy table in sync."""

@@ -121,8 +121,15 @@ class APIKeys(Base):
     def keys(self) -> dict:
         if not self.encrypted_keys:
             return {}
-        decrypted = fernet.decrypt(self.encrypted_keys.encode())
-        return json.loads(decrypted)
+        try:
+            decrypted = fernet.decrypt(self.encrypted_keys.encode())
+            return json.loads(decrypted)
+        except Exception as e:
+            # If decryption fails (e.g., encryption key changed), return empty dict
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to decrypt keys: {e}")
+            return {}
 
     @keys.setter
     def keys(self, value: dict):

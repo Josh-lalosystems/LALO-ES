@@ -394,7 +394,14 @@ async def get_available_models(
                     to_remove.append(name)
             for m in to_remove:
                 existing.pop(m, None)
-        return ai_service.get_available_models(current_user)
+        # Get cloud models
+        cloud_models = ai_service.get_available_models(current_user)
+
+        # Add local models if local inference is available
+        available_local_models = list(local_llm_service.model_configs.keys()) if local_llm_service.is_available() else []
+
+        # Combine and return
+        return cloud_models + available_local_models
     except Exception as e:
         # In case of failure, provide sensible defaults for the UI
         return ["gpt-4", "gpt-3.5-turbo", "claude-3"]
