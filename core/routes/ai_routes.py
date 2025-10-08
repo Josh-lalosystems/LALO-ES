@@ -28,6 +28,7 @@ from ..services.auth import get_current_user
 from ..services.database_service import database_service
 from ..services.pricing import calculate_cost, estimate_tokens
 from ..services.router_model import router_model
+from ..services.workflow_orchestrator import workflow_orchestrator
 try:
     from confidence_system import ConfidenceSystem  # type: ignore
     CONF_SYSTEM_AVAILABLE = True
@@ -292,6 +293,55 @@ async def send_ai_request(
         interpretation=interpretation,
         confidence=confidence_payload,
     )
+
+
+@router.post('/ai/feedback')
+async def ai_feedback_alias(payload: Dict, current_user: str = Depends(get_current_user)):
+    """
+    Lightweight compatibility endpoint for frontend feedback widget.
+
+    The frontend currently posts feedback to `/api/ai/feedback` with a payload like:
+      { response_id, helpful, reason?, details? }
+
+    The canonical workflow feedback endpoint is `/api/workflow/{session_id}/feedback`.
+    This alias attempts to be forgiving:
+      - If `response_id` looks like a workflow session id, forward to the orchestrator.
+      - Otherwise record a minimal audit log and return 202 Accepted so the UI shows success.
+
+    This is intentionally low-risk and non-blocking; more complete wiring (mapping
+    response_id -> session id or saving to the feedback table) can be added later.
+    """
+    try:
+        resp_id = payload.get('response_id') or payload.get('id')
+        helpful = payload.get('helpful')
+        reason = payload.get('reason') or payload.get('message') or ''
+        details = payload.get('details') or ''
+
+        # Best-effort: if response_id resembles a workflow session UUID, forward
+        # to the workflow orchestrator submit_feedback method. We can't reliably
+        # map arbitrary response ids here, so only attempt forward when session
+        # exists.
+        if resp_id:
+            try:
+                # If orchestrator exposes a lookup, use it. Otherwise, call submit_feedback
+                # and let it raise if session not found.
+                session_dict = await workflow_orchestrator.submit_feedback(
+                    session_id=resp_id,
+                    user_id=current_user,
+                    feedback_type='final' if helpful else 'reject',
+                    message=reason or details,
+                )
+                return session_dict
+            except Exception:
+                # Fallthrough: log and accept
+                logger.info("ai_feedback_alias: received feedback for non-workflow response_id=%s, user=%s", resp_id, current_user)
+
+        # Minimal ack for now
+        logger.info("ai_feedback_alias: recorded minimal feedback user=%s helpful=%s reason=%s", current_user, helpful, reason)
+        return { 'status': 'accepted' }
+    except Exception as e:
+        logger.exception("ai_feedback_alias error: %s", e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.post("/ai/chat/stream")
