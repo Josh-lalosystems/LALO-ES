@@ -28,11 +28,11 @@ from dataclasses import dataclass
 import asyncio
 from datetime import datetime
 
-from .confidence_system import ConfidenceSystem, InterpretationResult
-from .enhanced_memory_manager import EnhancedMemoryManager
-from .agent_runtime import AgentRuntime
-from .agent_factory import AgentFactory
-from .audit_logger import AuditLogger
+from confidence_system import ConfidenceSystem, InterpretationResult
+from enhanced_memory_manager import EnhancedMemoryManager
+from agent_runtime import AgentRuntime
+from agent_factory import AgentFactory
+from audit_logger import AuditLogger
 
 class WorkflowState(Enum):
     INTERPRETING = "interpreting"

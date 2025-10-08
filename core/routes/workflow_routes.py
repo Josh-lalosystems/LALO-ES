@@ -33,10 +33,16 @@ from ..services.auth import get_current_user
 from ..services.ai_service import ai_service
 from ..services.key_management import key_manager
 from ..services.workflow_orchestrator import workflow_orchestrator
+import logging
+
+logger = logging.getLogger("core.routes.workflow_routes")
 
 router = APIRouter(prefix="/api/workflow", tags=["LALO Workflow"])
 
 # Autonomy / auto-approval mode
+# Evaluate DEMO_MODE at module-import time as a sensible default, but
+# endpoints should re-check the environment at runtime because the
+# application may seed or update demo-related state during startup.
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 # If AUTO_APPROVE is not explicitly set, default to True in DEMO_MODE; otherwise False
 AUTO_APPROVE = os.getenv("AUTO_APPROVE", "true" if DEMO_MODE else "false").lower() == "true"
@@ -124,9 +130,21 @@ async def start_workflow(
     """
     try:
         # Ensure user has API keys and models initialized
+        # Re-evaluate DEMO_MODE at runtime to avoid stale module-level values
+        runtime_demo = os.getenv("DEMO_MODE", "false").lower() == "true"
+        logger.info("Start workflow request: user=%s runtime_demo=%s module_demo=%s", current_user, runtime_demo, DEMO_MODE)
         api_keys = key_manager.get_keys(current_user)
-        # In DEMO_MODE allow workflows to start without API keys
-        if not api_keys and not DEMO_MODE:
+
+        # Log which providers are present (don't log secrets)
+        try:
+            providers = list(api_keys.keys()) if isinstance(api_keys, dict) else []
+        except Exception:
+            providers = []
+        logger.info("API key providers for user %s: %s", current_user, providers)
+
+        # In runtime DEMO_MODE or for the demo user, allow workflows to start without API keys
+        if not api_keys and not (runtime_demo or current_user == 'demo-user@example.com'):
+            logger.warning("No API keys for user=%s and not in demo mode", current_user)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No API keys configured. Please add API keys in Settings before starting a workflow."
@@ -134,9 +152,12 @@ async def start_workflow(
 
         # Validate which keys are working
         key_status = await key_manager.validate_keys(current_user)
+        logger.info("Key validation for user %s: %s", current_user, key_status)
 
         # Check if we have at least OpenAI working
-        if not key_status.get("openai", False):
+        # If not running in demo mode or demo user, require a working OpenAI key
+        if not (runtime_demo or current_user == 'demo-user@example.com') and not key_status.get("openai", False):
+            logger.warning("OpenAI key not working for user=%s: %s", current_user, key_status)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="OpenAI API key is not working. Please check your API key in Settings."
@@ -147,11 +168,16 @@ async def start_workflow(
             ai_service.initialize_user_models(current_user, api_keys, key_status)
 
         # Use workflow orchestrator to start workflow
-        session_dict = await workflow_orchestrator.start_workflow(
-            user_request=request.user_request,
-            user_id=current_user,
-            context={"auto_approve": AUTO_APPROVE}
-        )
+        logger.info("Calling workflow_orchestrator.start_workflow for user=%s", current_user)
+        try:
+            session_dict = await workflow_orchestrator.start_workflow(
+                user_request=request.user_request,
+                user_id=current_user,
+                context={"auto_approve": AUTO_APPROVE}
+            )
+        except Exception:
+            logger.exception("workflow_orchestrator.start_workflow failed for user=%s", current_user)
+            raise
 
         # Convert to response model
         return WorkflowStatusResponse(**session_dict)
@@ -163,6 +189,39 @@ async def start_workflow(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start workflow: {str(e)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Development-only helper: start a mocked workflow when running in DEMO_MODE
+# This helps the frontend exercise the full workflow UI without requiring
+# real API keys or provider access. Only enabled for DEMO_MODE or demo user.
+# ---------------------------------------------------------------------------
+@router.post("/dev_start")
+async def dev_start_workflow(
+    request: StartWorkflowRequest,
+    current_user: str = Depends(get_current_user)
+) -> WorkflowStatusResponse:
+    runtime_demo = os.getenv("DEMO_MODE", "false").lower() == "true"
+    # Allow only in demo mode or for the demo user
+    if not (runtime_demo or current_user == 'demo-user@example.com'):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Dev start only allowed in DEMO mode or for demo user")
+
+    # Return a plausible initial workflow response (mocked)
+    now = datetime.utcnow().isoformat() + "Z"
+    session_id = f"dev_{uuid4()}"
+    resp = {
+        "session_id": session_id,
+        "current_state": WorkflowState.INTERPRETING.value,
+        "original_request": request.user_request,
+        "created_at": now,
+        "updated_at": now,
+        "interpreted_intent": "(mock) Interpret user intent",
+        "confidence_score": 0.9,
+        "reasoning_trace": ["(mock) step1", "(mock) step2"],
+        "suggested_clarifications": [],
+        "interpretation_approved": 1
+    }
+    return WorkflowStatusResponse(**resp)
 
 
 @router.get("/{session_id}/status")

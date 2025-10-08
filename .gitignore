@@ -57,3 +57,5 @@ models/
 .venv-wsl/
 .wsl_check_llama.py
 vs_env_raw.txt
+
+.env

@@ -18,6 +18,8 @@ from sqlalchemy.orm import sessionmaker
 import json
 import os
 from cryptography.fernet import Fernet
+import logging
+logger = logging.getLogger(__name__)
 try:
     from openai import AsyncOpenAI
 except Exception:
@@ -149,9 +151,6 @@ class KeyManager:
         """Validate that stored API keys are working"""
         keys = self.get_keys(user_id)
         status: Dict[str, bool] = {}
-
-        import logging
-        logger = logging.getLogger('key_management')
 
         if "openai" in keys and AsyncOpenAI is not None:
             try:

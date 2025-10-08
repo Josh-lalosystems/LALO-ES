@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import json
 import asyncio
+import threading
 from typing import Dict, Any
 
 
@@ -20,6 +21,25 @@ def _import_ok(name: str):
         return True, None
     except Exception as e:
         return False, str(e)
+
+
+def _run_coroutine_sync(coro):
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    result = {}
+    def runner():
+        try:
+            result['value'] = asyncio.run(coro)
+        except Exception as exc:
+            result['error'] = exc
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    thread.join()
+    if 'error' in result:
+        raise result['error']
+    return result.get('value')
 
 
 async def _check_aioredis(redis_url: str) -> Dict[str, Any]:
@@ -76,7 +96,7 @@ def check_optional_features() -> Dict[str, Any]:
     redis_url = os.getenv('REDIS_URL')
     if redis_url:
         try:
-            result = asyncio.run(_check_aioredis(redis_url))
+            result = _run_coroutine_sync(_check_aioredis(redis_url))
             features['redis_connection'] = result
         except Exception as e:
             features['redis_connection'] = {'available': False, 'error': str(e)}

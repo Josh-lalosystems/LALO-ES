@@ -35,6 +35,7 @@ class RAGTool(BaseTool):
     """RAG tool for document indexing and semantic search"""
 
     def __init__(self):
+        super().__init__()
         self._store = None
         self._initialized = False
 

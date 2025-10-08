@@ -33,11 +33,15 @@ from core.tools.code_executor import code_executor_tool
 from core.tools.file_operations import file_operations_tool
 from core.tools.database_query import database_query_tool
 from core.tools.api_call import api_call_tool
-from core.tools.automation_tool import KeyboardMouseTool
-from core.tools.chrome_control_tool import ChromeControlTool
+# GUI-dependent tools (import lazily only when initializing tools)
+# from core.tools.automation_tool import KeyboardMouseTool
+# from core.tools.chrome_control_tool import ChromeControlTool
 
 # Initialize new tools
 _skip_init = os.getenv("SKIP_TOOL_INIT", "false").lower() == "true"
+# If running headless (no DISPLAY) default to skipping GUI-based tool init
+if not _skip_init and not os.environ.get('DISPLAY'):
+    _skip_init = True
 
 keyboard_mouse_tool = None
 chrome_control_tool = None
@@ -47,15 +51,25 @@ if not _skip_init:
     import logging
     logger = logging.getLogger("lalo.tools")
     try:
-        keyboard_mouse_tool = KeyboardMouseTool()
+        try:
+            from core.tools.automation_tool import KeyboardMouseTool
+            keyboard_mouse_tool = KeyboardMouseTool()
+        except Exception as e:
+            logger.warning("failed to import/initialize KeyboardMouseTool: %s", e)
+            keyboard_mouse_tool = None
     except Exception as e:
-        logger.warning("failed to initialize KeyboardMouseTool: %s", e)
+        # fallback already handled
         keyboard_mouse_tool = None
 
     try:
-        chrome_control_tool = ChromeControlTool()
+        try:
+            from core.tools.chrome_control_tool import ChromeControlTool
+            chrome_control_tool = ChromeControlTool()
+        except Exception as e:
+            logger.warning("failed to import/initialize ChromeControlTool: %s", e)
+            chrome_control_tool = None
     except Exception as e:
-        logger.warning("failed to initialize ChromeControlTool: %s", e)
+        # fallback already handled
         chrome_control_tool = None
 
     # Register all tools

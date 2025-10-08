@@ -35,6 +35,7 @@ class ImageGeneratorTool(BaseTool):
     """Image generation tool using DALL-E"""
 
     def __init__(self):
+        super().__init__()
         self._openai_client = None
         self._storage_path = Path(os.getenv("IMAGE_STORAGE_PATH", "./data/images"))
         self._storage_path.mkdir(parents=True, exist_ok=True)

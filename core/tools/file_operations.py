@@ -54,6 +54,9 @@ def _is_allowed_type(path: str) -> bool:
 
 
 class FileOperationsTool(BaseTool):
+    def __init__(self):
+        super().__init__()
+
     @property
     def tool_definition(self) -> ToolDefinition:
         return ToolDefinition(

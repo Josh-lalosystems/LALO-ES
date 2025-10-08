@@ -33,6 +33,7 @@ class WebSearchTool(BaseTool):
     """Web search tool with multiple provider support"""
 
     def __init__(self):
+        super().__init__()
         self._provider = os.getenv("SEARCH_PROVIDER", "duckduckgo").lower()
         self._tavily_key = os.getenv("TAVILY_API_KEY")
         self._serpapi_key = os.getenv("SERPAPI_API_KEY")

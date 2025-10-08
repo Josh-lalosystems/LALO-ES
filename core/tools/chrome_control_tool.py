@@ -34,18 +34,13 @@ except ImportError:
     logger = logging.getLogger('core.tools.chrome_control_tool')
     logger.warning("selenium not installed. Install with: pip install selenium")
 
-from .base_tool import BaseTool, ToolParameter
+from core.tools.base import BaseTool, ToolParameter
 
 class ChromeControlTool(BaseTool):
     """Tool for controlling Chrome browser"""
 
     def __init__(self):
-        super().__init__(
-            name="chrome_browser_control",
-            description="Control Chrome browser: navigate pages, click elements, fill forms, extract data, take screenshots",
-            category="automation",
-            required_permissions=["automation:browser", "web:access"]
-        )
+        super().__init__()
 
         self.driver: Optional[Any] = None
         self.parameters = [

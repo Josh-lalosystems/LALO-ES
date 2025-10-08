@@ -10,19 +10,52 @@ of LALO AI SYSTEMS, LLC.
 """
 
 from typing import Optional, List
-from azure.storage.blob import BlobServiceClient
-from models import Document, StorageResult, UpdateResult
+import logging
+
+try:
+    from azure.storage.blob import BlobServiceClient
+except Exception:
+    BlobServiceClient = None  # type: ignore
 import os
 import json
+
+from models import Document, StorageResult, UpdateResult
+
+logger = logging.getLogger(__name__)
+
 
 class StorageService:
     def __init__(self):
         connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-        self.blob_service_client = BlobServiceClient.from_connection_string(connection_string)
         self.container_name = "documents"
         self.dead_letter_container = "dead_letters"
-        
+
+        if BlobServiceClient is None:
+            logger.warning("Azure Storage client not available; document persistence disabled")
+            self.blob_service_client = None
+            return
+
+        if not connection_string:
+            logger.warning("AZURE_STORAGE_CONNECTION_STRING not set; document persistence disabled")
+            self.blob_service_client = None
+            return
+
+        try:
+            self.blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+        except Exception as exc:
+            logger.warning("Failed to initialize Azure Storage client: %s", exc)
+            self.blob_service_client = None
+
+    def _storage_disabled(self) -> bool:
+        if self.blob_service_client is None:
+            logger.debug("Document storage is disabled")
+            return True
+        return False
+
     async def store_document(self, document: Document) -> StorageResult:
+        if self._storage_disabled():
+            return StorageResult(success=False, location="", errors=["Azure storage not configured"])
+
         try:
             # Get container client
             container_client = self.blob_service_client.get_container_client(self.container_name)
@@ -62,6 +95,9 @@ class StorageService:
 
     async def store_dead_letter(self, job_id: str, job: dict) -> bool:
         """Persist a dead-letter job as JSON into the dead_letters container."""
+        if self._storage_disabled():
+            return False
+
         try:
             container_client = self.blob_service_client.get_container_client(self.dead_letter_container)
             try:
@@ -78,6 +114,9 @@ class StorageService:
             return False
 
     async def list_dead_letters(self) -> list:
+        if self._storage_disabled():
+            return []
+
         try:
             container_client = self.blob_service_client.get_container_client(self.dead_letter_container)
             blobs = container_client.list_blobs()
@@ -94,6 +133,9 @@ class StorageService:
             return []
     
     async def retrieve_document(self, doc_id: str) -> Optional[Document]:
+        if self._storage_disabled():
+            return None
+
         try:
             container_client = self.blob_service_client.get_container_client(self.container_name)
             

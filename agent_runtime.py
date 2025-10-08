@@ -39,13 +39,13 @@ Edge Cases Handled:
  - Hallucination detection via missing / inconsistent output
 """
 
-from .hrm_adapter import HrmAdapter
-from .tool_connector_api import ApiToolConnector
-from .tool_connector_ui import UiToolConnector
-from .audit_logger import AuditLogger
-from .human_approval import HumanApprovalGate
-from .memory_manager import MemoryManager
-from .feedback_loop import FeedbackLoop
+from hrm_adapter import HrmAdapter
+from tool_connector_api import ApiToolConnector
+from tool_connector_ui import UiToolConnector
+from audit_logger import AuditLogger
+from human_approval import HumanApprovalGate
+from memory_manager import MemoryManager
+from feedback_loop import FeedbackLoop
 
 class AgentRuntimeError(Exception):
     pass

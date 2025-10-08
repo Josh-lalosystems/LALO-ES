@@ -28,6 +28,9 @@ def _is_select(sql: str) -> bool:
 
 
 class DatabaseQueryTool(BaseTool):
+    def __init__(self):
+        super().__init__()
+
     @property
     def tool_definition(self) -> ToolDefinition:
         return ToolDefinition(

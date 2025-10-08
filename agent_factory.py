@@ -30,9 +30,9 @@ Edge cases handled:
 """
 
 import uuid
-from .config_registry import ConfigRegistry
-from .agent_registry import AgentRegistry
-from .agents.default_agent import DefaultAgent
+from config_registry import ConfigRegistry
+from agent_registry import AgentRegistry
+from agents.default_agent import DefaultAgent
 
 class AgentCreationError(Exception):
     pass

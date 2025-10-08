@@ -143,7 +143,15 @@ class SecretsManager:
             ).fetchone()
             if not row:
                 return None
-            return self._decrypt(row.value_encrypted)
+            val = self._decrypt(row.value_encrypted)
+            if val is None:
+                # Log contextual info so operators can identify the problematic row
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Failed to decrypt secret record: name=%s user_id=%s id=%s",
+                    name, user_id, getattr(row, 'id', None)
+                )
+            return val
         finally:
             session.close()
 

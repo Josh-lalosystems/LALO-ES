@@ -34,7 +34,7 @@ from typing import Dict, List, Optional
 import json
 import chromadb
 from chromadb.config import Settings
-from .audit_logger import AuditLogger
+from audit_logger import AuditLogger
 
 class SessionMemory:
     def __init__(self):

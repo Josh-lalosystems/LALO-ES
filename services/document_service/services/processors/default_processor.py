@@ -9,16 +9,28 @@ via any medium, is strictly prohibited without the express written permission
 of LALO AI SYSTEMS, LLC.
 """
 
-import magic
+import logging
+
+try:
+    import magic
+except ImportError:
+    magic = None  # type: ignore
+
 from ...models import Document, ProcessingResult
+
+logger = logging.getLogger(__name__)
 
 class DefaultProcessor:
     async def process(self, document: Document) -> ProcessingResult:
         try:
             # Use python-magic to get MIME type
-            mime = magic.Magic(mime=True)
-            mime_type = mime.from_buffer(document.content)
-            
+            if magic is not None:
+                mime = magic.Magic(mime=True)
+                mime_type = mime.from_buffer(document.content)
+            else:
+                logger.debug("python-magic not installed; using octet-stream fallback")
+                mime_type = "application/octet-stream"
+
             # Basic metadata
             metadata = {
                 "mime_type": mime_type,

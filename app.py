@@ -223,6 +223,20 @@ async def root():
         "note": "Frontend build not found; run npm run build in lalo-frontend."
     }
 
+
+@app.get("/admin/logs")
+async def admin_logs():
+    """Lightweight admin logs stub so the frontend admin/logs route can load during development.
+
+    This is intentionally minimal — it returns a placeholder structure. The full admin
+    router is more complex and is not mounted here to avoid package-relative import issues
+    during development. Mount the full admin routes when you want the complete admin UI.
+    """
+    return {
+        "logs": [],
+        "note": "Admin logs endpoint stub. Mount full admin routes to enable real logs."
+    }
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
