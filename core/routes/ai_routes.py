@@ -331,6 +331,11 @@ async def ai_feedback_alias(payload: Dict, current_user: str = Depends(get_curre
                     feedback_type='final' if helpful else 'reject',
                     message=reason or details,
                 )
+                # If orchestrator returns a not_found error (session id unknown),
+                # treat it as an accepted ack so the frontend doesn't appear broken.
+                if isinstance(session_dict, dict) and session_dict.get('error') == 'not_found':
+                    logger.info("ai_feedback_alias: orchestrator reported not_found for response_id=%s; returning accepted ack", resp_id)
+                    return { 'status': 'accepted' }
                 return session_dict
             except Exception:
                 # Fallthrough: log and accept

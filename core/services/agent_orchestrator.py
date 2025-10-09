@@ -60,6 +60,7 @@ from datetime import datetime
 
 from core.services.router_model import router_model
 from core.services.local_llm_service import local_llm_service
+from core.services.ai_service import ai_service
 from core.services.confidence_model import confidence_model
 from core.services.tool_executor import tool_executor
 
@@ -441,14 +442,38 @@ Routing Info: Complexity={routing_decision.get('complexity', 0.5):.2f}, Path={ro
 
         logger.info(f"Executing simple request with {model}")
 
+
         try:
-            # Generate response
-            output = await self.inference_server.generate(
-                prompt=user_request,
-                model_name=model,
-                max_tokens=512,
-                temperature=0.7
-            )
+            # Helper to generate from a model name (cloud or local)
+            async def generate_from(model_name: str) -> str:
+                cloud_model_indicators = ("gpt", "claude")
+                if any(ind in model_name.lower() for ind in cloud_model_indicators):
+                    try:
+                        return await ai_service.generate(
+                            prompt=user_request,
+                            model_name=model_name,
+                            user_id=user_id,
+                            max_tokens=512,
+                            temperature=0.7,
+                        )
+                    except Exception as e:
+                        logger.warning(f"Cloud model generation failed for {model_name}: {e}; falling back to local inference")
+                        return await self.inference_server.generate(
+                            prompt=user_request,
+                            model_name=model_name,
+                            max_tokens=512,
+                            temperature=0.7
+                        )
+                else:
+                    return await self.inference_server.generate(
+                        prompt=user_request,
+                        model_name=model_name,
+                        max_tokens=512,
+                        temperature=0.7
+                    )
+
+            # Primary generation attempt
+            output = await generate_from(model)
 
             # Quick confidence check
             confidence_score = await self.confidence.score(
@@ -457,13 +482,83 @@ Routing Info: Complexity={routing_decision.get('complexity', 0.5):.2f}, Path={ro
                 model_used=model
             )
 
-            return {
+            # If confidence is low, attempt automatic fallback across available models
+            try:
+                conf_val = float(confidence_score.get("confidence", 0.0))
+            except Exception:
+                conf_val = 0.0
+
+            CONF_THRESHOLD = 0.70
+            tried = {model}
+            best_result = {
                 "response": output,
                 "model": model,
-                "confidence": confidence_score["confidence"],
+                "confidence": conf_val,
                 "confidence_details": confidence_score,
-                "path": "simple"
+                "path": "simple",
+                "fallback_attempts": []  # telemetry of attempts
             }
+
+            if conf_val < CONF_THRESHOLD and available_models:
+                logger.info(f"Low confidence ({conf_val:.2f}) for model {model}, attempting fallbacks")
+
+                # Build candidate list: prefer router-provided candidates if present
+                router_candidates = routing_decision.get("candidate_models") if routing_decision else None
+                if router_candidates and isinstance(router_candidates, list):
+                    # Keep only those also available
+                    candidates = [m for m in router_candidates if m in available_models and m not in tried]
+                else:
+                    # Fallback: prefer local models first then cloud
+                    local_candidates = [m for m in available_models if m in self.inference_server.model_configs and m not in tried]
+                    cloud_candidates = [m for m in available_models if m not in tried and m not in local_candidates]
+                    candidates = local_candidates + cloud_candidates
+
+                # Remove any duplicates while preserving order
+                seen = set()
+                candidates = [x for x in candidates if not (x in seen or seen.add(x))]
+
+                for cand in candidates:
+                    logger.info(f"Attempting fallback model: {cand}")
+                    attempt_record = {"model": cand, "success": False, "confidence": 0.0, "error": None}
+                    try:
+                        out_cand = await generate_from(cand)
+                        cand_conf = await self.confidence.score(
+                            output=out_cand,
+                            original_request=user_request,
+                            model_used=cand
+                        )
+                        cand_val = float(cand_conf.get("confidence", 0.0))
+
+                        attempt_record["success"] = True
+                        attempt_record["confidence"] = cand_val
+
+                        # Telemetry: record attempt
+                        best_result["fallback_attempts"].append(attempt_record)
+
+                        # Prefer higher confidence
+                        if cand_val > best_result["confidence"]:
+                            best_result.update({
+                                "response": out_cand,
+                                "model": cand,
+                                "confidence": cand_val,
+                                "confidence_details": cand_conf,
+                            })
+
+                        # If above threshold, stop early
+                        if cand_val >= CONF_THRESHOLD:
+                            logger.info(f"Fallback model {cand} achieved acceptable confidence {cand_val:.2f}")
+                            # Record final telemetry
+                            best_result["fallback_attempts"].append({"model": cand, "success": True, "confidence": cand_val, "chosen": True})
+                            return best_result
+
+                    except Exception as e:
+                        logger.warning(f"Fallback generation failed for {cand}: {e}")
+                        attempt_record["error"] = str(e)
+                        best_result["fallback_attempts"].append(attempt_record)
+                        continue
+
+            # Return best found result (may still be low-confidence); include telemetry
+            return best_result
 
         except Exception as e:
             logger.error(f"Simple request execution failed: {e}")

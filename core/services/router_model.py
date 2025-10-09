@@ -175,6 +175,8 @@ Context: {json.dumps(context) if context else "None"}
         # Allow routers to propose required specialized models and an action plan
         decision.setdefault("required_models", [])
         decision.setdefault("action_plan", [])
+        # Provide a ranked list of candidate models for fallback/use by orchestrator
+        decision.setdefault("candidate_models", [decision.get("recommended_model")])
 
         # Normalize values
         decision["complexity"] = max(0.0, min(1.0, float(decision["complexity"])))
@@ -213,6 +215,7 @@ Context: {json.dumps(context) if context else "None"}
             "path": path,
             "reasoning": "Heuristic-based routing (model unavailable)",
             "recommended_model": model,
+            "candidate_models": [model],
             "requires_tools": self._check_tool_keywords(request),
             "requires_workflow": complexity > 0.6,
             "required_models": [model] if path == "specialized" else [],
