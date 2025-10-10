@@ -242,6 +242,26 @@ Navigate to [http://localhost:8000](http://localhost:8000)
    - Select models to download
    - Essential models: ~8 GB, All models: ~25 GB
 
+### Database migration (important)
+
+When upgrading the codebase you may need to apply database schema changes. Two safe options are provided:
+
+- Using Alembic (recommended for production):
+
+```powershell
+# from repo root, using the project's virtualenv
+.\venv\Scripts\python.exe -m alembic upgrade head
+```
+
+- For SQLite-only environments (quick helper):
+
+```powershell
+# This script will add the `fallback_attempts` JSON column to the `requests` table
+python scripts/apply_fallback_column.py
+```
+
+If you use a different database (Postgres, MySQL), prefer running Alembic or create an equivalent migration for your platform.
+
 4. **Submit Your First Request**
    - Select "Auto (Router Decides)" for intelligent routing
    - Enter your question or task
