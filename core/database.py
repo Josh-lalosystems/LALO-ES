@@ -75,6 +75,7 @@ class Request(Base):
     user_id = Column(String, ForeignKey("users.id"))
     model = Column(String, nullable=False)
     prompt = Column(String, nullable=False)
+    fallback_attempts = Column(JSON, nullable=True)
     response = Column(String)
     status = Column(Enum(RequestStatus), default=RequestStatus.PENDING)
     created_at = Column(DateTime, default=datetime.utcnow)

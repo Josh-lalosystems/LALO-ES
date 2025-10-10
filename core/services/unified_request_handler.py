@@ -25,6 +25,7 @@ from datetime import datetime
 from core.services.router_model import router_model
 from core.services.agent_orchestrator import agent_orchestrator
 from core.services.local_llm_service import local_llm_service
+from core.services.database_service import database_service
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,16 @@ class UnifiedRequestHandler:
         # STEP 1: Route the request
         routing_decision = await self.router.route(user_request, context)
 
+        # STEP 2: Create a request record so we can attach metadata later (use recommended model if present)
+        request_row = None
+        try:
+            recommended = routing_decision.get('recommended_model') if isinstance(routing_decision, dict) else None
+            model_for_request = recommended or (available_models[0] if available_models else 'unknown')
+            request_row = database_service.create_request(user_id=user_id, model=model_for_request, prompt=user_request)
+        except Exception:
+            # Non-fatal: if DB unavailable, continue without per-request row
+            request_row = None
+
         logger.info(
             f"Routing decision: path={routing_decision['path']}, "
             f"complexity={routing_decision['complexity']:.2f}, "
@@ -152,7 +163,7 @@ class UnifiedRequestHandler:
         end_time = datetime.now()
         execution_time_ms = (end_time - start_time).total_seconds() * 1000
 
-        # STEP 3: Package response with metadata
+    # STEP 3: Package response with metadata
         response = {
             "response": result.get("response", ""),
             "model": result.get("model", result.get("models_used", ["unknown"])),
@@ -174,6 +185,51 @@ class UnifiedRequestHandler:
             f"confidence={result.get('confidence', 0):.2f}, "
             f"time={execution_time_ms:.0f}ms"
         )
+
+        # Persist fallback_attempts into Request row if available
+        try:
+            attempts = result.get('fallback_attempts', [])
+            if request_row and attempts:
+                try:
+                    database_service.attach_fallbacks_to_request(request_row.id, attempts)
+                except Exception:
+                    # Swallow DB errors for now
+                    logger.warning("Failed to attach fallback attempts to request")
+        except Exception:
+            # Defensive: nothing else to do
+            pass
+
+        # Persist final response, tokens and cost into the Request row when possible
+        try:
+            if request_row:
+                # Determine status and fields
+                err = result.get('metadata', {}).get('error') or result.get('error') or None
+                status = None
+                if err:
+                    from core.database import RequestStatus
+                    status = RequestStatus.FAILED
+                else:
+                    from core.database import RequestStatus
+                    status = RequestStatus.COMPLETED
+
+                # Try extract tokens and cost from common fields
+                tokens_used = result.get('tokens_used') or result.get('metadata', {}).get('tokens_used') or result.get('metadata', {}).get('total_tokens')
+                cost = result.get('cost') or result.get('metadata', {}).get('cost')
+                # Update request row
+                try:
+                    database_service.update_request(
+                        request_id=request_row.id,
+                        status=status,
+                        response=result.get('response', ''),
+                        tokens_used=tokens_used,
+                        cost=cost,
+                        error=str(err) if err else None
+                    )
+                except Exception:
+                    logger.warning("Failed to update request row with final fields")
+        except Exception:
+            # Swallow any unexpected errors updating DB
+            logger.debug("Non-fatal: exception while writing final request details to DB")
 
         return response
 

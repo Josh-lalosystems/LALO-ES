@@ -238,6 +238,25 @@ class DatabaseService:
             raise
         finally:
             session.close()
+    def attach_fallbacks_to_request(self, request_id: str, attempts: list):
+        """
+        Attach fallback_attempts metadata to an existing Request row.
+        Safe to call after create_request/update_request; will open its own session.
+        """
+        session = self.get_session()
+        try:
+            req = session.query(Request).filter(Request.id == request_id).first()
+            if not req:
+                return None
+            req.fallback_attempts = attempts
+            session.commit()
+            session.refresh(req)
+            return req
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
 # Create a global database service instance
 # No session stored - creates new sessions per operation
