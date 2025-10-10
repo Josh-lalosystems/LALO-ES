@@ -63,6 +63,7 @@ from core.services.local_llm_service import local_llm_service
 from core.services.ai_service import ai_service
 from core.services.confidence_model import confidence_model
 from core.services.tool_executor import tool_executor
+from core.services.database_service import database_service
 
 logger = logging.getLogger(__name__)
 
@@ -488,7 +489,16 @@ Routing Info: Complexity={routing_decision.get('complexity', 0.5):.2f}, Path={ro
             except Exception:
                 conf_val = 0.0
 
-            CONF_THRESHOLD = 0.70
+            import os
+            try:
+                CONF_THRESHOLD = float(os.getenv('LALO_CONF_THRESHOLD', '0.70'))
+            except Exception:
+                CONF_THRESHOLD = 0.70
+
+            try:
+                MAX_FALLBACKS = int(os.getenv('LALO_MAX_FALLBACKS', '5'))
+            except Exception:
+                MAX_FALLBACKS = 5
             tried = {model}
             best_result = {
                 "response": output,
@@ -517,7 +527,12 @@ Routing Info: Complexity={routing_decision.get('complexity', 0.5):.2f}, Path={ro
                 seen = set()
                 candidates = [x for x in candidates if not (x in seen or seen.add(x))]
 
+                attempts_count = 0
                 for cand in candidates:
+                    if attempts_count >= MAX_FALLBACKS:
+                        logger.info(f"Reached max fallback attempts ({MAX_FALLBACKS})")
+                        break
+                    attempts_count += 1
                     logger.info(f"Attempting fallback model: {cand}")
                     attempt_record = {"model": cand, "success": False, "confidence": 0.0, "error": None}
                     try:
@@ -556,6 +571,18 @@ Routing Info: Complexity={routing_decision.get('complexity', 0.5):.2f}, Path={ro
                         attempt_record["error"] = str(e)
                         best_result["fallback_attempts"].append(attempt_record)
                         continue
+
+            # Persist fallback telemetry if any attempts were made
+            if best_result.get("fallback_attempts"):
+                try:
+                    database_service.record_fallback_telemetry(
+                        user_id=user_id,
+                        prompt=user_request,
+                        primary_model=model,
+                        attempts=best_result.get("fallback_attempts", [])
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to persist fallback telemetry: {e}")
 
             # Return best found result (may still be low-confidence); include telemetry
             return best_result

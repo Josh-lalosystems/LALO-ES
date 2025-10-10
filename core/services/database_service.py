@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import uuid
 
-from ..database import User, Request, UsageRecord, RequestStatus, get_db, SessionLocal, Feedback
+from ..database import User, Request, UsageRecord, RequestStatus, get_db, SessionLocal, Feedback, AuditLog
 
 class DatabaseService:
     def __init__(self):
@@ -205,6 +205,34 @@ class DatabaseService:
             session.add(fb)
             session.commit()
             return fb
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def record_fallback_telemetry(self, user_id: str, prompt: str, primary_model: str, attempts: list):
+        """
+        Record fallback attempts as an audit log entry for later analysis.
+
+        attempts: list of dicts with keys: model, success, confidence, error (optional)
+        """
+        session = self.get_session()
+        try:
+            log = AuditLog(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                event_type="fallback_attempts",
+                action="record",
+                resource_type="model_selection",
+                resource_id=primary_model,
+                details={"prompt_excerpt": (prompt or '')[:400], "attempts": attempts},
+                result="success"
+            )
+            session.add(log)
+            session.commit()
+            session.refresh(log)
+            return log
         except Exception:
             session.rollback()
             raise

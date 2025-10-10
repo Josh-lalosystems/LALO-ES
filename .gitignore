@@ -1,3 +1,62 @@
+## LALO Project .gitignore
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+.venv/
+.venv-wsl/
+
+# Environment files
+.env
+.env.*
+
+# Databases and backups
+lalo.db
+lalo.db.backup*
+backups/
+
+# Model binaries and large artifacts
+models/
+*.gguf
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.onnx
+*.tflite
+*.h5
+
+# Logs and temp
+*.log
+frontend_build.log
+.tmp_*
+
+# Editor / IDE
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Screenshots and images (optional: keep if needed)
+Screenshot*
+*.png
+*.jpg
+
+# Frontend build / backups
+lalo-frontend/build/
+lalo-frontend-backup/
+
+# Misc
+vs_env_raw.txt
+.hintrc
 # Copyright (c) 2025 LALO AI LLC. All rights reserved.
 
 # Python

@@ -24,9 +24,48 @@ function App() {
 
   const handleSend = () => {
   if (chat.trim() === "") return; // Ensure chat is not empty
-    setChatHistory([...chatHistory, { sender: "user", text: chat }]);
+    // Optimistically add the user's message
+    setChatHistory(prev => [...prev, { sender: "user", text: chat }] );
+    const prompt = chat;
     setChat("");
-    // TODO: Send chat to backend and update taskPlan, etc.
+
+    // Call backend AI endpoint
+    (async () => {
+      try {
+        const resp = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt })
+        });
+        if (!resp.ok) {
+          const text = await resp.text();
+          setChatHistory(prev => [...prev, { sender: 'system', text: `Error: ${resp.status} ${text}` }]);
+          return;
+        }
+        const data = await resp.json();
+
+        // Add AI response to chat history
+        const aiText = data.response || data.result || '';
+        setChatHistory(prev => [...prev, { sender: 'system', text: aiText }]);
+
+        // Optionally update task plan if returned
+        if (data.routing_info || data.interpretation) {
+          setTaskPlan(data.interpretation || '');
+        }
+
+        // Store metadata/action history for side-panel display
+        if (data.metadata && data.metadata.fallback_attempts && data.metadata.fallback_attempts.length > 0) {
+          // Create a compact summary entry in action history for visibility
+          const attempts = data.metadata.fallback_attempts;
+          const final = attempts.find(a => a.chosen) || attempts[attempts.length-1];
+          const summary = `Fallbacks: ${attempts.length} attempted — final=${final.model} (confidence=${(final.confidence||0).toFixed(2)})`;
+          setActionHistory(prev => [...prev, { action: summary, time: new Date().toLocaleString() }]);
+        }
+
+      } catch (err) {
+        setChatHistory(prev => [...prev, { sender: 'system', text: `Network error: ${err.message}` }]);
+      }
+    })();
   };
 
   const handleApprove = () => {
@@ -45,6 +84,14 @@ function App() {
                 {msg.text}
               </div>
             ))}
+          </div>
+          {/* Display a lightweight fallback summary under the chat when present in the latest action history */}
+          <div style={{marginTop: 8}}>
+            {actionHistory.length > 0 && (
+              <div className="fallback-summary">
+                <strong>Recent action:</strong> {actionHistory[actionHistory.length-1].action}
+              </div>
+            )}
           </div>
           <div className="chat-input">
             <input

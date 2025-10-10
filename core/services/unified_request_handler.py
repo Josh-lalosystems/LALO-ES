@@ -163,7 +163,9 @@ class UnifiedRequestHandler:
             "metadata": {
                 **result.get("metadata", {}),
                 "execution_time_ms": execution_time_ms,
-                "user_id": user_id
+                "user_id": user_id,
+                # Surface fallback attempts at top-level metadata for easy frontend access
+                "fallback_attempts": result.get("fallback_attempts", [])
             }
         }
 
